@@ -5,43 +5,119 @@ from dash import html, dcc
 ####### STEP 1 ##############
 #############################
 
-def step_upload_data():
-    return html.Div(
-        style={"marginBottom": "30px"},
-        children=[
-            html.H4("Step 1: Upload Smart Meter Data"),
-            dcc.Upload(
-                id="upload-data1",
-                children=html.Div([
-                    "Drag and drop or ",
-                    html.A("select a file")
-                ]),
-                style={
-                    "width": "100%",
-                    "height": "30px",
-                    "lineHeight": "30px",
-                    "borderWidth": "1px",
-                    "borderStyle": "dashed",
-                    "borderRadius": "5px",
-                    "textAlign": "center",
-                    "marginBottom": "10px",
-                    "cursor": "pointer"
-                },
-                multiple=False
-            ),
-            dcc.Store(id="store-uploaded-file1"),
-            html.Div(id="file-upload-status1", style={"fontSize": "12px", "color": "green"}),
-            #html.Div(id="log-container"),
-            html.A(
-                "Download Input File Format",
-                href="/assets/optariff_input_file_format.csv",
-                download="optariff_input_file_format.csv",
-                target="_blank",
-                style={"fontSize": "13px", "color": "#007BFF", "textDecoration": "underline", "cursor": "pointer"}
-            )
-        ]
-    )
+""" ORIGINAL """
+# def step_upload_data():
+#     return html.Div(
+#         style={"marginBottom": "30px"},
+#         children=[
+#             html.H4("Step 1: Upload Smart Meter Data"),
+#             dcc.Upload(
+#                 id="upload-data1",
+#                 children=html.Div([
+#                     "Drag and drop or ",
+#                     html.A("select a file")
+#                 ]),
+#                 style={
+#                     "width": "100%",
+#                     "height": "30px",
+#                     "lineHeight": "30px",
+#                     "borderWidth": "1px",
+#                     "borderStyle": "dashed",
+#                     "borderRadius": "5px",
+#                     "textAlign": "center",
+#                     "marginBottom": "10px",
+#                     "cursor": "pointer"
+#                 },
+#                 multiple=False
+#             ),
+#             dcc.Store(id="store-uploaded-file1"),
+#             html.Div(id="file-upload-status1", style={"fontSize": "12px", "color": "green"}),
+#             #html.Div(id="log-container"),
+#             html.A(
+#                 "Download Input File Format",
+#                 href="/assets/optariff_input_file_format.csv",
+#                 download="optariff_input_file_format.csv",
+#                 target="_blank",
+#                 style={"fontSize": "13px", "color": "#007BFF", "textDecoration": "underline", "cursor": "pointer"}
+#             )
+#         ]
+#     )
 
+
+def step_upload_data():
+    """Step 1: Choose data source (Excel/CSV or DuckDB) with unified styling."""
+    return html.Div(
+        style={
+            "display": "flex",
+            "flexDirection": "column",
+            "alignItems": "flex-start",
+            "gap": "16px",
+            "padding": "24px",
+            "borderRadius": "24px",
+            "border": "1.167px solid #DAE0E6",
+            "background": "#FFF",
+            "alignSelf": "stretch",
+            "boxShadow": "0 1px 3px rgba(0, 0, 0, 0.1)",
+            "width": "100%",
+            "maxWidth": "600px",
+            "margin": "0 auto",
+        },
+        children=[
+
+            # ---------------------------------------------
+            # Header
+            # ---------------------------------------------
+            html.H4(
+                "Step 1: Select Smart Meter Data Source",
+                style={"marginBottom": "8px", "color": "#134A94"}
+            ),
+
+            # ---------------------------------------------
+            # Radio: Data Source Type (file vs duckdb)
+            # ---------------------------------------------
+            dcc.RadioItems(
+                id="data-source-type1",
+                options=[
+                    {"label": "📁 Upload Excel/CSV", "value": "file"},
+                    {"label": "🦆 Use DuckDB File", "value": "duckdb"},
+                ],
+                value="file",
+                labelStyle={"display": "block", "marginBottom": "6px"},
+                style={
+                    "marginBottom": "12px",
+                    "fontSize": "14px",
+                    "color": "#333",
+                },
+            ),
+
+            # ---------------------------------------------
+            # Placeholder for Dynamic UI (handled by callback)
+            # ---------------------------------------------
+            html.Div(id="data-input-area1", style={"width": "100%"}),
+
+            # ---------------------------------------------
+            # Download Sample Input
+            # ---------------------------------------------
+            html.A(
+                "📘 Download Sample Input File",
+                href="/assets/sample_input_file.csv",
+                download="sample_input_file.csv",
+                target="_blank",
+                style={
+                    "fontSize": "14px",
+                    "color": "#007BFF",
+                    "textDecoration": "underline",
+                    "cursor": "pointer",
+                    "marginTop": "10px",
+                },
+            ),
+
+            # Hidden Stores (for callback state)
+            dcc.Store(id="store-uploaded-file1"),
+            html.Div(id="file-upload-status1"),
+            html.Div(id="duckdb-path-status1"),
+        ],
+    )
 
 
 #############################
@@ -481,23 +557,66 @@ def step_select_tou_dynamicity():
 ####### STEP 6 ##############
 #############################
 
+""" Original """
+# def select_tou_bins():
+#     return html.Div([
+#         html.H4("Step 3: Select ToU Bins"),
+#
+#         dcc.Checklist(
+#             id="hour-selection1",
+#             options=[{"label": str(i), "value": i} for i in range(1, 25)],
+#             value=[],
+#             labelStyle={"display": "inline-block", "margin-right": "10px", "margin-bottom": "5px"}
+#         ),
+#
+#         html.Br(),
+#         html.Div(id="hour-selection-status1", style={"margin-top": "10px", "fontWeight": "bold"}),
+#
+#         # Store for selected hour range
+#         dcc.Store(id="selected-hours-store", storage_type="session")
+#     ])
+
+
 def select_tou_bins():
     return html.Div([
-        html.H4("Step 3: Select ToU Bins"),
-        
-        dcc.Checklist(
-            id="hour-selection1",
-            options=[{"label": str(i), "value": i} for i in range(1, 25)],
-            value=[],
-            labelStyle={"display": "inline-block", "margin-right": "10px", "margin-bottom": "5px"}
-        ),
+        html.H4("Step 3: Define ToU Bins", style={"marginBottom": "10px"}),
 
-        html.Br(),
-        html.Div(id="hour-selection-status1", style={"margin-top": "10px", "fontWeight": "bold"}),
+        html.Div([
+            html.Label("Enter Time Blocks (comma or | separated):",
+                       style={"fontWeight": "600", "marginBottom": "5px"}),
+            dcc.Input(
+                id="tou-bins-input1",
+                type="text",
+                placeholder="e.g., 1, 2, 3, 48 or 1|3|5|48",
+                debounce=False,  # ✅ user must click confirm
+                style={
+                    "width": "100%",
+                    "padding": "8px",
+                    "border": "1px solid #ccc",
+                    "borderRadius": "6px",
+                }
+            ),
+            html.Button(
+                "Confirm ToU Bands",
+                id="confirm-tou-bins1",
+                n_clicks=0,
+                style={
+                    "marginTop": "10px",
+                    "background": "#134A94",
+                    "color": "white",
+                    "border": "none",
+                    "borderRadius": "6px",
+                    "padding": "6px 14px",
+                    "cursor": "pointer"
+                }
+            ),
+        ]),
 
-        # Store for selected hour range
-        dcc.Store(id="selected-hours-store", storage_type="session")
+        html.Div(id="tou-bins-feedback1", style={"marginTop": "10px", "color": "#134A94"}),
+
+        dcc.Store(id="selected-hours-store1", storage_type="session"),
     ])
+
 
 #############################
 ####### STEP 7 ##############

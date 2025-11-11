@@ -10,15 +10,17 @@ from pages import make_monthly_cons
 from pages.plot_clusters import get_cluster_plot_figure
 from pages import clustering
 from dash.exceptions import PreventUpdate
-from pages import new_betrand_cluster_model
+#from pages import new_betrand_cluster_model
 from dash import html, dcc, ctx
-
+from pages.run_individual_model import extract_and_cache_consumers
+from pages.cache import ConsumerListCache, TimeBlockRangeCache, TouBinsCache
 
 ## Logic is as follows:
 # 1. User uploads data. if he isn't sure of format, he can download and see required format
 # 2. User can now start visualizing from first tab, he can now explore the attribute distribution to help guide clustering
 # 3. User can then select clustering options
 # 4. Then, remaining is as per run individual model
+
 
 
 
@@ -204,52 +206,253 @@ def register_callbacks(app):
     ####### STEP 1 ############## READ INPUT FILE
     ############################# 
 
+    # @app.callback(
+    #     Output("store-uploaded-file1", "data"),
+    #     Output("file-upload-status1", "children"),
+    #     Output("logs-area1", "children", allow_duplicate=True),
+    #     Input("upload-data1", "contents"),
+    #     State("upload-data1", "filename"),
+    #     #State("logs-area1", "children"),
+    #     prevent_initial_call=True,
+    # )
+    # def handle_file_upload(contents, filename):
+    #     if not contents:
+    #         raise PreventUpdate
+    #
+    #     try:
+    #         # Decode content
+    #         content_type, content_string = contents.split(',')
+    #         decoded = base64.b64decode(content_string)
+    #
+    #         # Save locally
+    #         os.makedirs("temp_data", exist_ok=True)
+    #         file_path = os.path.join("temp_data", filename)
+    #
+    #         with open(file_path, "wb") as f:
+    #             f.write(decoded)
+    #
+    #         # Cache path for later use
+    #         inputfileDirCache.set(file_path)
+    #
+    #         # Store file data in memory (for later inspection or plotting)
+    #         store_data = {
+    #             "filename": filename,
+    #             "path": file_path
+    #         }
+    #
+    #         return (
+    #             store_data,
+    #             html.Div(f"✅ Uploaded file: {filename}."),
+    #             html.Div(f"✅ File {filename} is ready to visualize. ‼️ Please select Ouput Directory before visualizing and then Select options in *Investigate Distribution* and  *Clustering Tool tabs* on the right-hand-side panel.")
+    #         )
+    #
+    #     except Exception as e:
+    #         return (
+    #             no_update,
+    #             html.Div("❌ Upload failed."),
+    #             html.Div(f"❌ Error: {str(e)}")
+    #         )
+
     @app.callback(
-        Output("store-uploaded-file1", "data"),
+        Output("data-input-area1", "children"),
+        Input("data-source-type1", "value"),
+    )
+    def toggle_data_input(source_type):
+        """Dynamically display the correct UI based on data source selection."""
+        common_style = {
+            "width": "100%",
+            "height": "70px",
+            "lineHeight": "70px",
+            "borderWidth": "2px",
+            "borderStyle": "dashed",
+            "borderRadius": "12px",
+            "textAlign": "center",
+            "backgroundColor": "#f9f9f9",
+            "color": "#555",
+            "fontSize": "14px",
+            "fontWeight": "500",
+            "cursor": "pointer",
+            "marginBottom": "10px",
+        }
+
+        # if source_type == "file":
+        #     return html.Div([
+        #         dcc.Upload(
+        #             id="upload-data",
+        #             children=html.Div("📂 Drag & drop or click to upload CSV/Excel file"),
+        #             style=common_style,
+        #             multiple=False
+        #         ),
+        #         html.Div(id="file-upload-status", style={
+        #             "fontSize": "13px",
+        #             "color": "#134A94",
+        #             "marginTop": "8px"
+        #         }),
+        #     ])
+        if source_type == "file":
+            return html.Div([
+                html.Div(
+                    "📄 Click to select CSV/Excel file",
+                    id="select-file-path-btn1",
+                    n_clicks=0,
+                    style=common_style
+                ),
+                html.Div(id="file-upload-status1", style={
+                    "fontSize": "13px",
+                    "color": "#134A94",
+                    "marginTop": "8px"
+                }),
+            ])
+
+        elif source_type == "duckdb":
+            return html.Div([
+                html.Div(
+                    "🦆 Click to select DuckDB file",
+                    id="select-duckdb-path-btn1",
+                    n_clicks=0,
+                    style=common_style
+                ),
+                html.Div(id="duckdb-path-status1", style={
+                    "fontSize": "13px",
+                    "color": "#134A94",
+                    "marginTop": "8px"
+                }),
+            ])
+
+        return html.Div("Please select a data source type above.")
+
+    """ DUCK AND CSV SELECTION """
+
+    @app.callback(
         Output("file-upload-status1", "children"),
         Output("logs-area1", "children", allow_duplicate=True),
-        Input("upload-data1", "contents"),
-        State("upload-data1", "filename"),
-        #State("logs-area1", "children"),
+        Input("select-file-path-btn1", "n_clicks"),
         prevent_initial_call=True,
     )
-    def handle_file_upload(contents, filename):
-        if not contents:
+    def select_local_csv_excel(n_clicks):
+        """Let the user pick a CSV/Excel file from disk and cache its path."""
+        if not n_clicks:
             raise PreventUpdate
 
         try:
-            # Decode content
-            content_type, content_string = contents.split(',')
-            decoded = base64.b64decode(content_string)
+            import tkinter as tk
+            from tkinter import filedialog
 
-            # Save locally
-            os.makedirs("temp_data", exist_ok=True)
-            file_path = os.path.join("temp_data", filename)
-
-            with open(file_path, "wb") as f:
-                f.write(decoded)
-
-            # Cache path for later use
-            inputfileDirCache.set(file_path)
-
-            # Store file data in memory (for later inspection or plotting)
-            store_data = {
-                "filename": filename,
-                "path": file_path
-            }
-
-            return (
-                store_data,
-                html.Div(f"✅ Uploaded file: {filename}."),
-                html.Div(f"✅ File {filename} is ready to visualize. ‼️ Please select Ouput Directory before visualizing and then Select options in *Investigate Distribution* and  *Clustering Tool tabs* on the right-hand-side panel.")
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            file_path = filedialog.askopenfilename(
+                title="Select CSV/Excel file",
+                filetypes=[("CSV", "*.csv"), ("Excel", "*.xlsx *.xls")],
             )
+            root.destroy()
+
+            if not file_path:
+                msg = "❌ No file selected or dialog cancelled."
+                return html.Div(msg, style={"color": "red"}), html.Div(msg)
+
+            # cache the path for later readers
+            inputfileDirCache.set(file_path)
+            extract_and_cache_consumers(file_path)
+            print(f"[CACHE] File selected: {file_path}")
+            print(f"[VERIFY CSV/EXCEL] Cache now holds: {inputfileDirCache.get()}")
+            # ✅ Try reading a small preview to verify and inspect columns
+            try:
+                # import pandas as pd
+
+                if file_path.lower().endswith(".csv"):
+                    df_preview = pd.read_csv(file_path)
+                    print(f"[INFO] CSV file loaded successfully. Columns: {list(df_preview.columns)}")
+                elif file_path.lower().endswith((".xlsx", ".xls")):
+                    df_preview = pd.read_excel(file_path)
+                    print(f"[INFO] Excel file loaded successfully. Columns: {list(df_preview.columns)}")
+                else:
+                    print("[WARN] Unsupported file format for preview.")
+
+            except Exception as e:
+                print(f"[ERROR] Failed to read preview: {e}")
+
+            msg = f"✅ Selected file: {file_path}"
+            return html.Div(msg, style={"color": "#134A94"}), html.Div(f"✅ File path saved: {file_path}")
 
         except Exception as e:
-            return (
-                no_update,
-                html.Div("❌ Upload failed."),
-                html.Div(f"❌ Error: {str(e)}")
-            )
+            err = f"❌ Error selecting file: {e}"
+            return html.Div(err, style={"color": "red"}), html.Div(err)
+
+
+    @app.callback(
+        Output("duckdb-path-status1", "children"),
+        Output("logs-area1", "children", allow_duplicate=True),
+        Input("select-duckdb-path-btn1", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def select_duckdb_file(n_clicks):
+        """Open DuckDB file picker safely from a background thread."""
+        result_queue = queue.Queue()
+
+        def open_dialog(q):
+            import tkinter as tk
+            from tkinter import filedialog
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                duck_path = filedialog.askopenfilename(
+                    title="Select DuckDB File",
+                    filetypes=[("DuckDB files", "*.duckdb")],
+                )
+                q.put(duck_path if duck_path else None)
+            except Exception as e:
+                q.put(f"Error: {e}")
+            finally:
+                try:
+                    root.destroy()
+                except:
+                    pass
+
+        t = threading.Thread(target=open_dialog, args=(result_queue,), daemon=True)
+        t.start()
+        t.join(timeout=60)  # wait for user to finish selecting
+
+        duck_path = result_queue.get() if not result_queue.empty() else None
+        if not duck_path or isinstance(duck_path, str) and duck_path.startswith("Error:"):
+            msg = "❌ No file selected or dialog cancelled."
+            return html.Div(msg, style={"color": "red"}), html.Div(msg)
+
+        # ✅ Cache path
+        inputfileDirCache.set(duck_path)
+        print(f"[VERIFY DUCKDB TEST] Cache now holds: {inputfileDirCache.get()}")
+        # ✅ Extract and cache consumers
+        extract_and_cache_consumers(duck_path)
+        print(f"[CACHE] DuckDB file set: {duck_path}")
+        # ✅ Quick read check — verify file, table, and columns
+        try:
+            import duckdb
+
+            con = duckdb.connect(duck_path, read_only=True)
+            tables = con.execute("SHOW TABLES").fetchall()
+
+            if not tables:
+                print("[WARN] No tables found in the DuckDB file.")
+            else:
+                table_name = tables[0][0]
+                df_preview = con.execute(f"SELECT * FROM {table_name} LIMIT 5").fetchdf()
+                print(f"[INFO] DuckDB file read OK. Using table: '{table_name}'")
+                print(f"[INFO] Columns: {list(df_preview.columns.to_list()[10])}")
+                print(f"[INFO] Unique Consumers: {df_preview['CONS_NO'].unique()}")
+                unique_consumers = df_preview['CONS_NO'].unique()
+                del df_preview
+
+
+            con.close()
+
+        except Exception as e:
+            print(f"[ERROR] Failed to read DuckDB file: {e}")
+
+
+        msg = f"✅ Selected DuckDB file: {duck_path}"
+        return html.Div(msg, style={"color": "#134A94"}), html.Div(f"✅ File path saved: {duck_path}")
+
 
     #############################
     ####### STEP 2 ############## SELECT OUTPUT DIRECTORY
@@ -342,6 +545,35 @@ def register_callbacks(app):
             elif fp.endswith(".xls") or fp.endswith(".xlsx"):
                 df = pd.read_excel(fp, engine='openpyxl')
                 logs.append("✅ Loaded Excel file.")
+
+            elif fp.endswith(".duckdb") or fp.endswith(".db"):
+                import duckdb
+                logs.append("🦆 Detected DuckDB database file.")
+                try:
+                    # Connect to DuckDB and read all tables or a specific one
+                    con = duckdb.connect(database=fp, read_only=True)
+
+                    # List all tables in the DuckDB file
+                    tables = con.execute("SHOW TABLES").fetchall()
+                    logs.append(f"📋 Tables found: {[t[0] for t in tables]}")
+
+                    if tables:
+                        # Read the first table by default (you can modify this)
+                        table_name = tables[0][0]
+                        df = con.execute(f"SELECT * FROM {table_name}").fetchdf()
+                        logs.append(f"✅ Loaded table '{table_name}' from DuckDB file.")
+                        print(df.columns)
+                    else:
+                        logs.append("❌ No tables found in DuckDB file.")
+                        df = pd.DataFrame()
+
+                except Exception as e:
+                    logs.append(f"❌ Error reading DuckDB file: {e}")
+                    df = pd.DataFrame()
+
+                finally:
+                    con.close()
+
             else:
                 logs.append("❌ Unsupported file format.")
                 return go.Figure(), html.Ul([html.Li(log) for log in logs])
@@ -769,17 +1001,58 @@ def register_callbacks(app):
     ####### STEP 6 ##############
     #############################
 
+    # @app.callback(
+    #     Output("selected-hours-store1", "data"),
+    #     Output("hour-selection-status1", "children"),
+    #     Input("hour-selection1", "value"),
+    #     prevent_initial_call=True
+    # )
+    # def store_selected_hours(selected_hours):
+    #     if not selected_hours:
+    #         return [], "⚠️ No hours selected."
+    #     return selected_hours, f"✅ Selected {len(selected_hours)} hour(s): {sorted(selected_hours)}"
+
     @app.callback(
         Output("selected-hours-store1", "data"),
-        Output("hour-selection-status1", "children"),
-        Input("hour-selection1", "value"),
+        Output("tou-bins-feedback1", "children"),
+        Input("confirm-tou-bins1", "n_clicks"),
+        State("tou-bins-input1", "value"),
         prevent_initial_call=True
     )
-    def store_selected_hours(selected_hours):
-        if not selected_hours:
-            return [], "⚠️ No hours selected."
-        return selected_hours, f"✅ Selected {len(selected_hours)} hour(s): {sorted(selected_hours)}"
-    
+    def confirm_tou_bins(n_clicks, input_text):
+        import re
+        """Validate and store ToU bin selections."""
+        if not input_text:
+            return dash.no_update, "⚠️ Please enter at least one time block."
+
+        # Parse numbers (split by comma or pipe)
+        parts = re.split(r"[,\|]", input_text)
+        try:
+            hours = sorted(set(int(p.strip()) for p in parts if p.strip().isdigit()))
+        except ValueError:
+            return dash.no_update, "❌ Invalid entry: please enter integers only."
+
+        tb_range = TimeBlockRangeCache.get()
+        # Retrieve valid time range from cache
+        start_hr = tb_range['first']
+        end_hr = tb_range['last']
+
+        # Validate range
+        invalid = [h for h in hours if h < start_hr or h > end_hr]
+        if invalid:
+            return dash.no_update, f"❌ Invalid hour(s): {invalid}. Must be within [{start_hr}, {end_hr}]."
+
+        if len(hours) < 2:
+            return dash.no_update, "⚠️ You need at least two breakpoints to form bands."
+
+        TouBinsCache.set(hours)
+        print(f" [CACHE TEST] Tou Bins Set by user : {TouBinsCache.get()}")
+        msg = f"✅ ToU bands updated successfully: {hours}"
+        print(f"[INFO] Updated ToU hours: {hours}")
+        return hours, msg
+
+
+
 
     #############################
     ####### STEP 7 ##############

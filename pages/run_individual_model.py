@@ -29,7 +29,7 @@ import requests
 import dash
 import re
 from dash.exceptions import PreventUpdate
-from pages import new_betrand_VM
+#from pages import new_betrand_VM
 import chardet
 import csv
 from pages.cache import ConsumerListCache, TouBinsCache
