@@ -1,0 +1,73 @@
+
+Gurobi 12.0.3 (win64) logging started Mon Nov 10 17:00:53 2025
+
+Set parameter LogFile to value "SM_model_t2.log"
+Set parameter PreDual to value 1
+Set parameter Seed to value 42
+Set parameter Threads to value 1
+Warning: Q constraint 100 doesn't have a name
+Warning: default Q constraint names used to write mps file
+Gurobi Optimizer version 12.0.3 build v12.0.3rc0 (win64 - Windows 11.0 (26100.2))
+
+CPU model: 13th Gen Intel(R) Core(TM) i9-13950HX, instruction set [SSE2|AVX|AVX2]
+Thread count: 24 physical cores, 32 logical processors, using up to 1 threads
+
+Non-default parameters:
+PreDual  1
+Seed  42
+Threads  1
+
+WLS license 2688311 - registered to Lantau Group India
+Optimize a model with 6140 rows, 121 columns and 8040 nonzeros
+Model fingerprint: 0xe761b979
+Model has 201 quadratic constraints
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+02]
+  QMatrix range    [4e+00, 2e+02]
+  QLMatrix range   [2e-13, 2e+03]
+  Objective range  [2e-01, 1e+00]
+  Bounds range     [1e+01, 1e+06]
+  RHS range        [7e+00, 6e+01]
+  QRHS range       [4e+04, 4e+04]
+Warning: Quadratic constraints contain large coefficient range on linear part
+         Consider reformulating model or setting NumericFocus parameter
+         to avoid numerical issues.
+Presolve removed 6139 rows and 0 columns
+Presolve time: 0.03s
+Presolved: 2241 rows, 2323 columns, 6581 nonzeros
+Presolved model has 101 second-order cone constraints
+Ordering time: 0.01s
+
+Barrier statistics:
+ Free vars  : 2203
+ AA' NZ     : 2.965e+04
+ Factor NZ  : 7.216e+04 (roughly 3 MB of memory)
+ Factor Ops : 2.343e+06 (less than 1 second per iteration)
+ Threads    : 1
+
+                  Objective                Residual
+Iter       Primal          Dual         Primal    Dual     Compl     Time
+   0   9.76879394e+07  0.00000000e+00  2.15e+00 9.82e+04  5.63e+04     0s
+   1   1.11959650e+07 -1.12766197e+06  2.14e-01 7.38e+03  5.81e+03     0s
+   2   3.25430144e+06 -8.00535068e+05  6.62e-02 4.06e+03  1.97e+03     0s
+   3   8.93710504e+03 -1.96128937e+05  4.09e-03 5.51e+02  1.31e+02     0s
+   4   1.94694222e+03 -1.86119759e+02  4.73e-04 9.14e-01  9.16e-01     0s
+   5   4.33306804e+02  7.74798587e+01  7.89e-05 2.35e-05  1.39e-01     0s
+   6   3.46691190e+02  4.75837691e+00  5.67e-05 1.59e-05  1.33e-01     0s
+   7   3.30604972e+02  5.62553436e+01  1.97e-05 2.00e-05  1.07e-01     0s
+   8   2.01116243e+02  1.38530641e+02  3.47e-06 3.98e-06  2.44e-02     0s
+   9   1.72219833e+02  1.44765887e+02  1.47e-06 1.36e-06  1.07e-02     0s
+  10   1.64649694e+02  1.44621387e+02  1.01e-06 1.09e-06  7.81e-03     0s
+  11   1.62897400e+02  1.45975919e+02  9.03e-07 3.34e-07  6.60e-03     0s
+  12   1.61432516e+02  1.45899434e+02  8.17e-07 1.01e-07  6.06e-03     0s
+  13   1.53452698e+02  1.46585529e+02  2.88e-07 7.71e-08  2.68e-03     0s
+  14   1.51508693e+02  1.46966046e+02  1.93e-07 4.56e-08  1.77e-03     0s
+  15   1.48732554e+02  1.47400866e+02  4.87e-08 9.72e-09  5.20e-04     0s
+  16   1.47561076e+02  1.47485876e+02  1.54e-09 1.36e-09  2.93e-05     0s
+  17   1.47511072e+02  1.47507508e+02  2.11e-11 4.89e-09  1.39e-06     0s
+  18   1.47509103e+02  1.47508663e+02  3.83e-10 4.40e-08  1.72e-07     0s
+  19   1.47508901e+02  1.47508847e+02  6.79e-11 2.54e-07  2.09e-08     0s
+
+Barrier solved model in 19 iterations and 0.15 seconds (0.09 work units)
+Optimal objective 1.47508901e+02
+

@@ -1,0 +1,95 @@
+#######################################################################################################################
+###############-------------- CREATE VIRTUAL ENVIRONMENT --------------------- ########################################
+#######################################################################################################################
+
+# To create  venv
+python -m venv venv
+
+# To activate venv
+./venv/Scripts/activate
+
+
+# To convert a jupyter notebook to python file of the same name 
+jupyter nbconvert --to script ToU_Optimization_20250409.ipynb
+
+######################################################################################################################
+###############-------------- HANDLE PACKAGE MANAGEMENT --------------------- ########################################
+######################################################################################################################
+
+# To handle conflict of global environment with package management 
+# (eg with gurobipy)
+
+
+pip install --target ./venv/Lib/site-packages/ gurobipy
+
+
+
+
+
+# To check who else is running a task on the gurobi license on server
+ps -p 848391 -o pid,user,cmd
+kill 
+
+
+#######################################################################################################################
+###############-------------- USE GIT -------------------------------------- ##########################################
+#######################################################################################################################
+
+# https://www.w3schools.com/git/git_branch_pull_from_remote.asp?remote=github
+
+## The first thing we need to do, is to check if Git is properly installed:
+git --version
+git config --global user.name "PT"
+git config --global user.email "piyush.thukral93@gmail.com"
+
+### Initialize GIT now
+
+git init 
+## Reinitialized existing Git repository in C:/Users/Piyush Thukral/OneDrive - THE LANTAU GROUP (HK) LIMITED/General - GMO/model_development_env/TK_Testing/.git/
+
+## Check git status
+git status
+## On branch main ..... no changes added to commit (use "git add" and/or "git commit -a")
+## basically, now git is aware of the file and its changes, but has not added it to the repository that was initialized
+
+### A small summary of how "changes" will appear after git has been initialized
+
+#A - Added (This is a new file that has been added to the repository)
+#M - Modified (An existing file has been changed)
+#D - Deleted (a file has been deleted)
+#U - Untracked (The file is new or has been changed but has not been added to the repository yet)
+#C - Conflict (There is a conflict in the file)
+#R - Renamed (The file has been renamed)
+#S - Submodule (In repository exists another subrepository)
+#T - Typechange (The file changed from symlink to regular file, or visa versa)
+
+
+#### Core concepts of git is STAGING, whenever you hit a milestone or finish part of the work, you add files to the staging environment
+## you can add a file by using "add" command [commit]
+
+git add READ_ME.txt ## to stage only one specific file
+git add --all       ## to stage ALL files
+
+## Check status, and it will tell which all changes are ready to be committed
+git status
+git status --short
+
+## After, staging, we are ready to move from stage to commit to the repository
+## Always add a message while 'commit'-ing
+git commit -m "First release of GPO"
+
+### To check history of commits for a repository, use log
+git log
+
+## to exit some long code in git shell, press "q"
+
+############# to add a remote GITHUB repository ###############################
+git remote add origin https://github.com/PiyushThukral/greenko_github_repo.git
+
+## to push changes to that origin repository
+git push -u origin main
+
+########### -------------------------------------------------------------------
+
+
+
