@@ -14,6 +14,7 @@ from dash.exceptions import PreventUpdate
 from dash import html, dcc, ctx
 from pages.run_individual_model import extract_and_cache_consumers
 from pages.cache import ConsumerListCache, TimeBlockRangeCache, TouBinsCache
+import re
 
 ## Logic is as follows:
 # 1. User uploads data. if he isn't sure of format, he can download and see required format
@@ -21,6 +22,60 @@ from pages.cache import ConsumerListCache, TimeBlockRangeCache, TouBinsCache
 # 3. User can then select clustering options
 # 4. Then, remaining is as per run individual model
 
+
+import json
+
+# Load from config file
+with open("config_patterns.json", "r") as f:
+    config = json.load(f)
+
+time_block_patterns = config["TIMEBLOCK_PATTERNS"]
+
+def _timeblock_columns(columns, TIMEBLOCK_PATTERNS):
+    """Identify time block columns using patterns from config."""
+    regex_patterns = TIMEBLOCK_PATTERNS["regex"]
+    prefix_patterns = TIMEBLOCK_PATTERNS["prefix"]
+
+    # Try regex matches first
+    combined_regex = "|".join(f"({p})" for p in regex_patterns)
+    patt = re.compile(combined_regex, re.IGNORECASE)
+    cols = [c for c in columns if patt.fullmatch(c)]
+
+    if not cols:
+        # fallback to prefix matching
+        cols = [
+            c for c in columns
+            if any(c.lower().startswith(prefix) for prefix in prefix_patterns)
+        ]
+
+    return cols
+
+
+def cache_timeblock_range(columns, time_block_patterns):
+    """
+    Identify time-block/hour columns and cache the first and last numeric indices.
+    Works for patterns like ImportkWhTimeBlock1...48 or Consumption_Hr_1...24
+    """
+    import re
+
+    tb_cols = _timeblock_columns(columns, TIMEBLOCK_PATTERNS= time_block_patterns)
+    if not tb_cols:
+        print("[WARN] No timeblock columns detected.")
+        return
+
+    # Extract numeric parts from column names
+    nums = []
+    for c in tb_cols:
+        match = re.search(r'(\d+)', c)
+        if match:
+            nums.append(int(match.group(1)))
+
+    if nums:
+        first = min(nums)
+        last = max(nums)
+        TimeBlockRangeCache.set(first, last)
+    else:
+        print("[WARN] No numeric suffix found in timeblock columns.")
 
 
 
@@ -356,6 +411,11 @@ def register_callbacks(app):
             extract_and_cache_consumers(file_path)
             print(f"[CACHE] File selected: {file_path}")
             print(f"[VERIFY CSV/EXCEL] Cache now holds: {inputfileDirCache.get()}")
+
+
+            """ Dynamically Save the Time Block """
+
+
             # ✅ Try reading a small preview to verify and inspect columns
             try:
                 # import pandas as pd
@@ -363,9 +423,15 @@ def register_callbacks(app):
                 if file_path.lower().endswith(".csv"):
                     df_preview = pd.read_csv(file_path)
                     print(f"[INFO] CSV file loaded successfully. Columns: {list(df_preview.columns)}")
+
+                    cache_timeblock_range(columns = df_preview.columns)
+
                 elif file_path.lower().endswith((".xlsx", ".xls")):
                     df_preview = pd.read_excel(file_path)
                     print(f"[INFO] Excel file loaded successfully. Columns: {list(df_preview.columns)}")
+
+                    cache_timeblock_range(columns=df_preview.columns)
+
                 else:
                     print("[WARN] Unsupported file format for preview.")
 
@@ -441,6 +507,9 @@ def register_callbacks(app):
                 print(f"[INFO] Columns: {list(df_preview.columns.to_list()[10])}")
                 print(f"[INFO] Unique Consumers: {df_preview['CONS_NO'].unique()}")
                 unique_consumers = df_preview['CONS_NO'].unique()
+
+                cache_timeblock_range(columns=df_preview.columns, time_block_patterns = time_block_patterns)
+
                 del df_preview
 
 
@@ -530,6 +599,12 @@ def register_callbacks(app):
     def update_distribution_plot(selected_attribute, uploaded_data):
         logs = []
 
+        CONSUMER_PATTERNS = ["consumer", "cons_no", "cons no", "cons", "consumer_no", "consumer_number"]
+        CATEGORY_CANDIDATES = ["category", "category_code", "category code", "categorycode", "category_name"]
+        CONNECTED_LOAD_CANDIDATES = ["connected_load", "connected load", "sanctioned_load_kw", "sanctioned load",
+                                     "sanctioned_load", "sanctioned load kw"]
+
+
         try:
             fp = inputfileDirCache.get()  # full path to the uploaded file
             logs.append(f"📂 Reading file path: {fp}")
@@ -590,26 +665,57 @@ def register_callbacks(app):
                 logs.append("⚠️ No attribute selected.")
                 return go.Figure(), html.Ul([html.Li(log) for log in logs])
 
-            if selected_attribute not in df.columns and selected_attribute not in ['Sanctioned_Load_KW', 'monthly_consumption']:
-                logs.append(f"❌ Selected attribute '{selected_attribute}' not found in data.")
-                return go.Figure(), html.Ul([html.Li(log) for log in logs])
+            print(f" SELECTED ATTRIBUTE is {selected_attribute}")
+            # if selected_attribute not in df.columns and selected_attribute not in ['Sanctioned_Load_KW', 'monthly_consumption']:
+            #     logs.append(f"❌ Selected attribute '{selected_attribute}' not found in data.")
+            #     return go.Figure(), html.Ul([html.Li(log) for log in logs])
+
+            df_columns = [str(c).strip() for c in df.columns]
+            matched_cons_num = [c for c in df_columns if any(p in c.lower() for p in CONSUMER_PATTERNS)]
+
+            if 'Consumer No' in df.columns:
+                cons_col = 'Consumer No'
+
+            else:
+                cons_col = matched_cons_num[0]
+
+            group_col,x_label = None, None
 
             # Handle binning logic
             if selected_attribute == 'Sanctioned_Load_KW':
-                if 'sanctioned_load_bin' not in df.columns:
-                    #bins = [0, 1, 2, 3, 5, 10, 20, 50, 100, float('inf')]
-                    #labels = ['0-1', '1-2', '2-3', '3-5', '5-10', '10-20', '20-50', '50-100', '100+']
-                    
-                    df['sanctioned_load_bin'] = pd.qcut(df['Sanctioned_Load_KW'], q=10, duplicates='drop')
-                    
-                    #df['sanctioned_load_bin'] = pd.cut(df['Sanctioned_Load_KW'], bins=bins, labels=labels, right=False)
-                    logs.append("📊 Created sanctioned load bins.")
+
+
+                if selected_attribute in df.columns:
+                    if 'sanctioned_load_bin' not in df.columns:
+                        #bins = [0, 1, 2, 3, 5, 10, 20, 50, 100, float('inf')]
+                        #labels = ['0-1', '1-2', '2-3', '3-5', '5-10', '10-20', '20-50', '50-100', '100+']
+
+                        df['sanctioned_load_bin'] = pd.qcut(df['Sanctioned_Load_KW'], q=10, duplicates='drop')
+
+                        #df['sanctioned_load_bin'] = pd.cut(df['Sanctioned_Load_KW'], bins=bins, labels=labels, right=False)
+                        logs.append("📊 Created sanctioned load bins.")
+
+                else:
+
+                    matched_cols = [c for c in df_columns if any(p in c.lower() for p in CONNECTED_LOAD_CANDIDATES)]
+
+                    if 'sanctioned_load_bin' not in df.columns:
+                        #bins = [0, 1, 2, 3, 5, 10, 20, 50, 100, float('inf')]
+                        #labels = ['0-1', '1-2', '2-3', '3-5', '5-10', '10-20', '20-50', '50-100', '100+']
+
+                        df['sanctioned_load_bin'] = pd.qcut(df[matched_cols[0]], q=10, duplicates='drop')
+
+                        #df['sanctioned_load_bin'] = pd.cut(df['Sanctioned_Load_KW'], bins=bins, labels=labels, right=False)
+                        logs.append(f"📊 Created sanctioned load bins from column --- {matched_cols[0]}")
+
+
                 group_col = 'sanctioned_load_bin'
                 x_label = 'Sanctioned Load Bin (kW)'
 
             elif selected_attribute == 'monthly_consumption':
-                
-                consumption_cols = [col for col in df.columns if col.startswith('Consumption_Hr_')]
+                consumption_cols = _timeblock_columns(columns = df.columns, TIMEBLOCK_PATTERNS = time_block_patterns)
+                print(consumption_cols)
+                #consumption_cols = [col for col in df.columns if col.startswith('Consumption_Hr_')]
                 #df['Year'] = df['Date'].dt.year
                 df['Month'] = df['Date'].dt.month.astype(str)
                 df['Year'] = df['Date'].dt.year.astype(str)      
@@ -628,12 +734,10 @@ def register_callbacks(app):
                 # Now group by Consumer No, Year and Month, then sum total_consumption to get monthly consumption
                 #monthly_consumption_df = df.groupby(['Consumer No', 'Month', 'Year'])['daily_demand'].sum().reset_index()
 
-                
-                monthly_consumption_df = df.groupby(['Consumer No', 'Month', 'Year'])['daily_demand'].sum().reset_index(name='total_monthly_consumption')
+                monthly_consumption_df = df.groupby([cons_col, 'Month', 'Year'])['daily_demand'].sum().reset_index(name='total_monthly_consumption')
                 monthly_consumption_df['Month'] = monthly_consumption_df['Month'].astype(str)
                 monthly_consumption_df['Month'] = monthly_consumption_df['Month'].astype(str)
                 monthly_consumption_df['total_monthly_consumption'] = monthly_consumption_df['total_monthly_consumption'].round(0)
-
 
                 print(monthly_consumption_df.columns)
                 # Rename for clarity
@@ -643,7 +747,7 @@ def register_callbacks(app):
 
                 print(monthly_consumption_df.columns)
                 if 'total_monthly_consumption' not in df.columns:
-                    df = df.merge(monthly_consumption_df[['Consumer No', 'Year', 'Month', 'total_monthly_consumption']], on=['Consumer No', 'Year', 'Month'], how='left')
+                    df = df.merge(monthly_consumption_df[[cons_col, 'Year', 'Month', 'total_monthly_consumption']], on=[cons_col, 'Year', 'Month'], how='left')
 
                 print(df.columns)
                 print('Minimum consumption ')
@@ -656,21 +760,40 @@ def register_callbacks(app):
 
                     df['monthly_consumption_bin'] = pd.qcut(df['total_monthly_consumption'], q=10, duplicates='drop')
                     logs.append("📊 Created monthly consumption bins.")
+
                 group_col = 'monthly_consumption_bin'
                 x_label = 'Monthly Consumption Bin'
 
-            else:
-                group_col = selected_attribute
-                x_label = selected_attribute
+            elif selected_attribute == 'Category':
+
+                if selected_attribute in df.columns:
+                    group_col = selected_attribute
+                    x_label = selected_attribute
+
+                else:
+
+                    matched_category = [c for c in df_columns if any(p in c.lower() for p in CATEGORY_CANDIDATES)]
+                    if len(matched_category) > 0:
+                        group_col = matched_category[0]
+                        x_label = matched_category[0]
+
+                        print(f"CATEGORY --- {group_col}")
+                    else:
+
+                        print("NO CATEGORY FOUND")
 
 
             # Frequency stats
-            if 'Consumer No' not in df.columns:
+            if cons_col is None:
                 logs.append("❌ 'Consumer No' column missing from file.")
                 return go.Figure(), html.Ul([html.Li(log) for log in logs])
 
-            bin_counts = df.groupby(group_col)['Consumer No'].nunique().sort_index()
-            total_unique = df['Consumer No'].nunique()
+            if group_col is None and x_label is None:
+                logs.append("❌ Select Attribute Please")
+                return go.Figure(), html.Ul([html.Li(log) for log in logs])
+
+            bin_counts = df.groupby(group_col)[cons_col].nunique().sort_index()
+            total_unique = df[cons_col].nunique()
             bin_percent = (bin_counts / total_unique * 100).round(2)
 
             logs.append(f"✅ Calculated frequency for {group_col}. Total unique consumers: {total_unique}")
