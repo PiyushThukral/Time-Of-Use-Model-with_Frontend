@@ -11,88 +11,7 @@ import base64
 import pandas as pd
 import os
 import io
-from pages.cache import TimeBlockRangeCache, TimeBlockRangeCacheCompareLeft, TimeBlockRangeCacheCompareRight
-import json
-import re
 
-
-
-# Load from config file
-with open("config_patterns.json", "r") as f:
-    config = json.load(f)
-
-TIMEBLOCK_PATTERNS = config["TIMEBLOCK_PATTERNS"]
-
-def _timeblock_columns(columns):
-    """Identify time block columns using patterns from config."""
-    regex_patterns = TIMEBLOCK_PATTERNS["regex"]
-    prefix_patterns = TIMEBLOCK_PATTERNS["prefix"]
-
-    # Try regex matches first
-    combined_regex = "|".join(f"({p})" for p in regex_patterns)
-    patt = re.compile(combined_regex, re.IGNORECASE)
-    cols = [c for c in columns if patt.fullmatch(c)]
-
-    if not cols:
-        # fallback to prefix matching
-        cols = [
-            c for c in columns
-            if any(c.lower().startswith(prefix) for prefix in prefix_patterns)
-        ]
-
-    return cols
-
-def cache_timeblock_range_left(columns):
-    """
-    Identify time-block/hour columns and cache the first and last numeric indices.
-    Works for patterns like ImportkWhTimeBlock1...48 or Consumption_Hr_1...24
-    """
-    import re
-
-    tb_cols = _timeblock_columns(columns)
-    if not tb_cols:
-        print("[WARN] No timeblock columns detected.")
-        return
-
-    # Extract numeric parts from column names
-    nums = []
-    for c in tb_cols:
-        match = re.search(r'(\d+)', c)
-        if match:
-            nums.append(int(match.group(1)))
-
-    if nums:
-        first = min(nums)
-        last = max(nums)
-        TimeBlockRangeCacheCompareLeft.set(first, last)
-    else:
-        print("[WARN] No numeric suffix found in timeblock columns.")
-
-def cache_timeblock_range_right(columns):
-    """
-    Identify time-block/hour columns and cache the first and last numeric indices.
-    Works for patterns like ImportkWhTimeBlock1...48 or Consumption_Hr_1...24
-    """
-    import re
-
-    tb_cols = _timeblock_columns(columns)
-    if not tb_cols:
-        print("[WARN] No timeblock columns detected.")
-        return
-
-    # Extract numeric parts from column names
-    nums = []
-    for c in tb_cols:
-        match = re.search(r'(\d+)', c)
-        if match:
-            nums.append(int(match.group(1)))
-
-    if nums:
-        first = min(nums)
-        last = max(nums)
-        TimeBlockRangeCacheCompareRight.set(first, last)
-    else:
-        print("[WARN] No numeric suffix found in timeblock columns.")
 
 
 layout = html.Div([
@@ -381,15 +300,10 @@ def register_callbacks(app):
 
             net_change_profit = output[output['Consumer No'] == consumer]['Change_in_Retailer_Profit'].unique().round(2)
 
-            # hr_cols = _timeblock_columns(df.columns)
-            # cache_timeblock_range_left(df.columns)
-            # tb_range = TimeBlockRangeCacheCompareLeft.get()
             
-            tb_range = TimeBlockRangeCache.get()
-            
-            tcols = [f"TB_{i}" for i in range(1, tb_range['last'] + 1)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last'] + 1)]
-            x_vals = list(range(1, tb_range['last'] + 1))
+            tcols = [f"Hour_{i}" for i in range(1, 25)]
+            tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
+            x_vals = list(range(1, 25))
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -430,7 +344,7 @@ def register_callbacks(app):
                 title={'text' : f"Consumer {consumer} | Expected Change in DISCOM's Profit: ₹{net_change_profit[0]} | <br> Savings %: {net_save_pct[0]} % to {net_savings_baseline_pct[0]} % | Savings: ₹{net_save[0]} to ₹{net_savings_baseline[0]} |",
                        'font': dict(size=10)
                 },
-                xaxis_title='TimeBlock',
+                xaxis_title='Hour of Day',
                 yaxis_title='Load (kW)',
                 autosize=True,
                 #legend_title_text="Date",
@@ -462,9 +376,7 @@ def register_callbacks(app):
                 bills_df = pd.read_json(store_data["bills_df"], orient='split')
                 bills_before_opt = bills_df[bills_df['Type'] == "Before Optimization"]
                 sheet_df = output
-
-                tb_range = TimeBlockRangeCache.get()
-                cols = [f'TB_{i}' for i in range(1, tb_range['last']+1)]
+                cols = [f'Hour_{i}' for i in range(1, 25)]
                 before_opt = sheet_df[sheet_df['Type'] == 'Before Optimization'].copy()
                 after_opt = sheet_df[sheet_df['Type'] == 'After Optimization'].copy()
 
@@ -477,21 +389,21 @@ def register_callbacks(app):
                 # Convert to DataFrame for plotting
                 compare_df = pd.DataFrame(compare, index=['Before Optimization', 'After Optimization']).T
                 compare_df.reset_index(inplace=True)
-                compare_df.rename(columns={'index': 'TB'}, inplace=True)
+                compare_df.rename(columns={'index': 'Hour'}, inplace=True)
 
                 total_bill = bills_before_opt['Energy_bill_with_existing_tariffs'].sum(axis=0) * 30
                 total_savings = bills_before_opt['net_savings'].sum(axis=0)
                 total_savings_pct = (total_savings / total_bill * 100).round(2)
 
 
-                # Optional: Format TimeBlock column to be numeric (TB_1 → 1)
-                compare_df['TB'] = compare_df['TB'].str.extract(r'TB_(\d+)').astype(int)
+                # Optional: Format Hour column to be numeric (Hour_1 → 1)
+                compare_df['Hour'] = compare_df['Hour'].str.extract(r'Hour_(\d+)').astype(int)
                 fig = go.Figure()
 
-                fig.add_trace(go.Scatter(x=compare_df['TB'], y=compare_df['Before Optimization'],
+                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['Before Optimization'],
                                      name='Before Optimization',line=dict(color='blue'), mode = 'lines'))
 
-                fig.add_trace(go.Scatter(x=compare_df['TB'], y=compare_df['After Optimization'],
+                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['After Optimization'],
                                      name='After Optimization', line=dict(color='green'), mode = 'lines'))
 
                 fig.update_layout(
@@ -499,7 +411,7 @@ def register_callbacks(app):
                         #'text': f"Load and Tariff Profiles for ALL consumers,  | Total Savings %: {total_savings_pct} %",
                         'text': f"Load and Tariff Profiles for ALL consumers",
                         'font': dict(size=8)},
-                    xaxis_title='TimeBlock',
+                    xaxis_title='Hour of Day',
                     yaxis_title='Total Load (kW)',
                     barmode='group',
                     autosize=True,
@@ -582,10 +494,9 @@ def register_callbacks(app):
 
             net_change_profit = output[output['Consumer No'] == consumer]['Change_in_Retailer_Profit'].unique().round(2)
 
-            tb_range = TimeBlockRangeCache.get()
-            tcols = [f"TB_{i}" for i in range(1, tb_range['last']+1)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last']+1)]
-            x_vals = list(range(1, tb_range['last']+1))
+            tcols = [f"Hour_{i}" for i in range(1, 25)]
+            tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
+            x_vals = list(range(1, 25))
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -627,7 +538,7 @@ def register_callbacks(app):
                     'text': f"Consumer {consumer} | Expected Change in DISCOMs's Profit: ₹{net_change_profit[0]} | <br> Savings %: {net_save_pct[0]} % to {net_savings_baseline_pct[0]} % | Savings: ₹{net_save[0]} to ₹{net_savings_baseline[0]} |",
                     'font': dict(size=10)
                     },
-                xaxis_title='TimeBlock',
+                xaxis_title='Hour of Day',
                 yaxis_title='Load (kW)',
                 autosize=True,
                 # legend_title_text="Date",
@@ -659,8 +570,7 @@ def register_callbacks(app):
                 sheet_df = output
                 bills_df = pd.read_json(store_data["bills_df"], orient='split')
                 bills_before_opt = bills_df[bills_df['Type'] == "Before Optimization"]
-                tb_range = TimeBlockRangeCache.get()
-                cols = [f'TB_{i}' for i in range(1, tb_range['last']+1)]
+                cols = [f'Hour_{i}' for i in range(1, 25)]
                 before_opt = sheet_df[sheet_df['Type'] == 'Before Optimization'].copy()
                 after_opt = sheet_df[sheet_df['Type'] == 'After Optimization'].copy()
 
@@ -673,20 +583,20 @@ def register_callbacks(app):
                 # Convert to DataFrame for plotting
                 compare_df = pd.DataFrame(compare, index=['Before Optimization', 'After Optimization']).T
                 compare_df.reset_index(inplace=True)
-                compare_df.rename(columns={'index': 'TB'}, inplace=True)
+                compare_df.rename(columns={'index': 'Hour'}, inplace=True)
 
                 total_bill = bills_before_opt['Energy_bill_with_existing_tariffs'].sum(axis=0) * 30
                 total_savings = bills_before_opt['net_savings'].sum(axis=0)
                 total_savings_pct = (total_savings / total_bill * 100).round(2)
 
-                # Optional: Format TB column to be numeric (TB_1 → 1)
-                compare_df['TB'] = compare_df['TB'].str.extract(r'TB_(\d+)').astype(int)
+                # Optional: Format Hour column to be numeric (Hour_1 → 1)
+                compare_df['Hour'] = compare_df['Hour'].str.extract(r'Hour_(\d+)').astype(int)
                 fig = go.Figure()
 
-                fig.add_trace(go.Scatter(x=compare_df['TB'], y=compare_df['Before Optimization'],
+                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['Before Optimization'],
                                          name='Before Optimization', line=dict(color='blue'), mode='lines'))
 
-                fig.add_trace(go.Scatter(x=compare_df['TB'], y=compare_df['After Optimization'],
+                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['After Optimization'],
                                          name='After Optimization', line=dict(color='green'), mode='lines'))
 
                 fig.update_layout(
@@ -694,7 +604,7 @@ def register_callbacks(app):
                         #'text': f"Load and Tariff Profiles for ALL consumers,  | Total Savings %: {total_savings_pct} %",
                         'text': f"Load and Tariff Profiles for ALL consumers",
                         'font': dict(size=8)},
-                    xaxis_title='TimeBlock',
+                    xaxis_title='Hour of Day',
                     yaxis_title='Total Load (kW)',
                     barmode='group',
                     autosize=True,

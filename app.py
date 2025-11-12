@@ -1,3 +1,4 @@
+from doctest import debug
 import dash
 from dash import dcc, html, State, no_update
 from dash.dependencies import Input, Output
@@ -166,4 +167,5 @@ def update_loader_and_notification(store_data, pathname):
 if __name__ == "__main__":
     Timer(1, open_browser).start()
     # app.run(dev_tools_ui=True,use_reloader=False,)
-    app.run(debug=True,use_reloader=False)
+    # app.run(debug=True,use_reloader=False)
+    app.run(debug= True, use_reloader = False)

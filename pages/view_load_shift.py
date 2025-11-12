@@ -5,7 +5,7 @@ from dash import dcc, html, Input, Output, State, no_update
 import plotly.graph_objs as go
 #from pages import run_model_dashboard
 from plotly.subplots import make_subplots
-from pages.cache import SaveDirCache , OutputFileNameCache
+from pages.cache import SaveDirCache , OutputFileNameCache, TimeBlockRangeCache
 
 
 
@@ -171,10 +171,12 @@ def register_callbacks(app):
 
         net_change_profit = output[output['Consumer No'] == consumer]['Change_in_Retailer_Profit'].unique()
 
-        # Define hour columns
-        tcols = [f"Hour_{i}" for i in range(1, 25)]
-        tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
-        x_vals = list(range(1, 25))
+        # Define time block columns
+        tb_range = TimeBlockRangeCache.get()
+
+        tcols = [f"TB_{i}" for i in range(1, tb_range['last'] +1)]
+        tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last'] +1 )]
+        x_vals = list(range(1, tb_range['last'] +1 ))
 
         # Create figure with secondary y-axis
         fig = make_subplots(specs=[[{"secondary_y": True}]])
