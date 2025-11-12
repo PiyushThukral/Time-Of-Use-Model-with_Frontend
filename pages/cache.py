@@ -77,6 +77,32 @@ class TimeBlockRangeCache:
     def get(cls):
         return cls._range
 
+class TimeBlockRangeCacheCompareLeft:
+    """Cache the first and last time block numbers detected in the data."""
+    _range = {"first": None, "last": None}
+
+    @classmethod
+    def set(cls, first, last):
+        cls._range = {"first": first, "last": last}
+        print(f"[CACHE] Time block range set: first={first}, last={last}")
+
+    @classmethod
+    def get(cls):
+        return cls._range
+
+class TimeBlockRangeCacheCompareRight:
+    """Cache the first and last time block numbers detected in the data."""
+    _range = {"first": None, "last": None}
+
+    @classmethod
+    def set(cls, first, last):
+        cls._range = {"first": first, "last": last}
+        print(f"[CACHE] Time block range set: first={first}, last={last}")
+
+    @classmethod
+    def get(cls):
+        return cls._range
+
 
 class ToUDynamicityCache:
     _data = None

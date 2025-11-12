@@ -1,0 +1,59 @@
+2025-11-12 14:20:41,963 - === Model run started ===
+2025-11-12 14:20:41,970 - ==========================
+2025-11-12 14:20:41,985 - ==========================
+2025-11-12 14:20:41,985 - Customer Data File Path     : C:/Users/Piyush Thukral/Downloads/optariff_test.csv
+2025-11-12 14:20:41,985 - Model Parameter File   : temp_data\OPTARIFF_model_parameter_file_FORMAT_testing.xlsx
+2025-11-12 14:20:41,999 - Output Folder          : C:\Users\Piyush Thukral\Downloads
+2025-11-12 14:20:42,000 - User Output Name       : elasticity_24
+2025-11-12 14:20:42,001 - Timestamped Output     : elasticity_24
+2025-11-12 14:20:42,001 - ToU Bins               : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+2025-11-12 14:20:42,003 - Total Time Blocks      : 24
+2025-11-12 14:20:42,004 - Continuity Setting     : 1
+2025-11-12 14:20:42,006 - Historical Days        : 30
+2025-11-12 14:20:42,006 - Output File Path       : C:\Users\Piyush Thukral\Downloads/elasticity_24.xlsx
+2025-11-12 14:20:42,008 - [INFO] Reading CSV file: C:/Users/Piyush Thukral/Downloads/optariff_test.csv
+2025-11-12 14:20:42,016 - [SUCCESS] Loaded data with shape: (14, 30)
+2025-11-12 14:20:42,018 - [INFO] read data has the following columns Consumption_Hr_ 
+2025-11-12 14:20:42,436 - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+2025-11-12 14:20:42,436 - Testing from Model code : Tod continuity setting----1...........
+2025-11-12 14:20:42,436 - Bin 1: [1, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+2025-11-12 14:20:42,436 - Bin 2: [2]
+2025-11-12 14:20:42,436 - Bin 3: [3]
+2025-11-12 14:20:42,436 - Bin 4: [4]
+2025-11-12 14:20:42,451 - Bin 5: [5]
+2025-11-12 14:20:42,452 - Bin 6: [6]
+2025-11-12 14:20:42,453 - Bin 7: [7]
+2025-11-12 14:20:42,454 - Bin 8: [8]
+2025-11-12 14:20:42,455 - Bin 9: [9]
+2025-11-12 14:20:42,456 - Bin 10: [10]
+2025-11-12 14:20:42,596 - Bin 1: ['Consumption_Hr_1', 'Consumption_Hr_11', 'Consumption_Hr_12', 'Consumption_Hr_13', 'Consumption_Hr_14', 'Consumption_Hr_15', 'Consumption_Hr_16', 'Consumption_Hr_17', 'Consumption_Hr_18', 'Consumption_Hr_19', 'Consumption_Hr_20', 'Consumption_Hr_21', 'Consumption_Hr_22', 'Consumption_Hr_23', 'Consumption_Hr_24']
+2025-11-12 14:20:42,597 - Bin 2: ['Consumption_Hr_2']
+2025-11-12 14:20:42,599 - Bin 3: ['Consumption_Hr_3']
+2025-11-12 14:20:42,603 - Bin 4: ['Consumption_Hr_4']
+2025-11-12 14:20:42,605 - Bin 5: ['Consumption_Hr_5']
+2025-11-12 14:20:42,606 - Bin 6: ['Consumption_Hr_6']
+2025-11-12 14:20:42,608 - Bin 7: ['Consumption_Hr_7']
+2025-11-12 14:20:42,610 - Bin 8: ['Consumption_Hr_8']
+2025-11-12 14:20:42,611 - Bin 9: ['Consumption_Hr_9']
+2025-11-12 14:20:42,612 - Bin 10: ['Consumption_Hr_10']
+2025-11-12 14:20:42,656 - ok2
+2025-11-12 14:20:42,749 - [Elasticity COLUMN NAMES CHECK]: Index(['Date', 'Consumer No', 'Meter No', 'Sanctioned_Load_KW', 'Category',
+2025-11-12 14:20:42,749 -        'MeterPhase_Name', 'Consumption_Hr_1', 'Consumption_Hr_2',
+2025-11-12 14:20:42,753 -        'Consumption_Hr_3', 'Consumption_Hr_4', 'Consumption_Hr_5',
+2025-11-12 14:20:42,754 -        'Consumption_Hr_6', 'Consumption_Hr_7', 'Consumption_Hr_8',
+2025-11-12 14:20:42,757 -        'Consumption_Hr_9', 'Consumption_Hr_10', 'Consumption_Hr_11',
+2025-11-12 14:20:42,758 -        'Consumption_Hr_12', 'Consumption_Hr_13', 'Consumption_Hr_14',
+2025-11-12 14:20:42,761 -        'Consumption_Hr_15', 'Consumption_Hr_16', 'Consumption_Hr_17',
+2025-11-12 14:20:42,762 -        'Consumption_Hr_18', 'Consumption_Hr_19', 'Consumption_Hr_20',
+2025-11-12 14:20:42,764 -        'Consumption_Hr_21', 'Consumption_Hr_22', 'Consumption_Hr_23',
+2025-11-12 14:20:42,765 -        'Consumption_Hr_24', 'Total_in_period_1', 'Average_in_period_1',
+2025-11-12 14:20:42,766 -        'Total_in_period_2', 'Average_in_period_2', 'Total_in_period_3',
+2025-11-12 14:20:42,767 -        'Average_in_period_3', 'Total_in_period_4', 'Average_in_period_4',
+2025-11-12 14:20:42,768 -        'Total_in_period_5', 'Average_in_period_5', 'Total_in_period_6',
+2025-11-12 14:20:42,769 -        'Average_in_period_6', 'Total_in_period_7', 'Average_in_period_7',
+2025-11-12 14:20:42,770 -        'Total_in_period_8', 'Average_in_period_8', 'Total_in_period_9',
+2025-11-12 14:20:42,772 -        'Average_in_period_9', 'Total_in_period_10', 'Average_in_period_10',
+2025-11-12 14:20:42,777 -        'monthly_consumption'],
+2025-11-12 14:20:42,778 -       dtype='object')
+2025-11-12 14:20:42,780 - [Category Column Check]: Category
+2025-11-12 14:20:42,862 - === Model run finished ===

@@ -1,4 +1,4 @@
-from dash import html, dcc, Output, Input, callback, Dash
+from dash import html, dcc, Output, Input, callback, Dash,Input, Output, State, callback, no_update
 from steps_module import step_upload_data, step_select_output_folder , step_render_graph , step_select_tou_dynamicity, select_tou_bins, first_last_continuity, step_upload_model_param, step_run_model, step_view_results, view_customer_profile
 import dash
 import plotly.graph_objs as go
@@ -6,14 +6,11 @@ from pages.cache import inputfileDirCache , SaveDirCache , ToUDynamicityCache , 
 import sys
 from sklearn.ensemble import IsolationForest
 import pages
-from dash import Input, Output, State, callback, no_update
-from dash import Input, Output, State
 import pandas as pd
 import plotly.graph_objects as go
 import base64
 import io
 import base64
-import pandas as pd
 import os
 import tkinter as tk
 from tkinter import filedialog
@@ -23,16 +20,21 @@ import threading
 import io
 import sys
 import os
-import pandas as pd
 import duckdb
 import requests
-import dash
 import re
 from dash.exceptions import PreventUpdate
 #from pages import new_betrand_VM
 import chardet
 import csv
-from pages.cache import ConsumerListCache, TouBinsCache
+from pages.cache import ConsumerListCache, TouBinsCache, ConsumerListCache, TimeBlockRangeCache
+import gurobipy as gp
+from configparser import ConfigParser
+import time
+from dash import html
+import logging
+from logging.handlers import RotatingFileHandler
+import json
 
 log_buffer = io.StringIO()
 model_thread = None
@@ -47,17 +49,142 @@ MONTH_CANDIDATES = ["month"]  # case-insensitive match
 CATEGORY_CANDIDATES = ["category", "category_code", "category code", "categorycode", "category_name"]
 CONNECTED_LOAD_CANDIDATES = ["connected_load", "connected load", "sanctioned_load_kw", "sanctioned load", "sanctioned_load"]
 
-import re
-import duckdb
-import pandas as pd
-from pages.cache import ConsumerListCache, TimeBlockRangeCache
 
-import pandas as pd
-import duckdb
+
+# CONSUMER_PATTERNS = ["consumer", "cons_no", "cons no"]
+# TIMEBLOCK_PATTERNS = {
+#     "regex": [
+#         r"ImportkWhTimeBlock\d+",
+#         r"Consumption_?Hr_\d+",
+#         r"ConsumptionHr\d+",
+#     ],
+#     "prefix": [
+#         "importkwhtimeblock",
+#         "consumption_hr_",
+#         "consumptionhr",
+#     ],
+# }
+
+# Load from config file
+with open("config_patterns.json", "r") as f:
+    config = json.load(f)
+
+TIMEBLOCK_PATTERNS = config["TIMEBLOCK_PATTERNS"]
+
+
+import logging
+from logging.handlers import RotatingFileHandler
+import sys
+
+LOG_PATH = "model_logs.txt"
+
+# Stream-to-logger helper (captures prints)
+class StreamToLogger:
+    def __init__(self, logger, level=logging.INFO):
+        self.logger = logger
+        self.level = level
+        self._buf = ""
+
+    def write(self, buf):
+        # Buffer until newline then send to logger
+        self._buf += buf
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line:
+                self.logger.log(self.level, line)
+
+    def flush(self):
+        if self._buf:
+            self.logger.log(self.level, self._buf)
+            self._buf = ""
+
+# configure logger
+logger = logging.getLogger("tou_model")
+logger.setLevel(logging.INFO)
+# RotatingFileHandler to avoid huge files (optional)
+fh = RotatingFileHandler(LOG_PATH, maxBytes=5_000_000, backupCount=2)
+fmt = logging.Formatter("%(asctime)s - %(message)s")
+fh.setFormatter(fmt)
+logger.addHandler(fh)
+# (Optional) also show on console while developing
+console_h = logging.StreamHandler(sys.stdout)
+console_h.setFormatter(fmt)
+logger.addHandler(console_h)
+
+import threading
 import os
-import re
 
-CONSUMER_PATTERNS = ["consumer", "cons_no", "cons no"]
+def _clear_log_file():
+    try:
+        open(LOG_PATH, "w").close()
+    except Exception:
+        pass
+
+def _run_model_in_thread(**kwargs):
+    """
+    Runs the TOU model in a background thread.
+    kwargs are the same args you currently pass to pages.new_betrand_VM.run.
+    """
+    def _target():
+        logger.info("=== Model run started ===")
+        # Redirect prints to logger while model runs
+        stdout_backup = sys.stdout
+        sys.stdout = StreamToLogger(logger, logging.INFO)
+        try:
+            pages.new_betrand_VM.run(**kwargs)
+            logger.info("✅ Model run complete.")
+        except Exception as e:
+            logger.exception(f"❌ Error while running TOU model: {e}")
+        finally:
+            sys.stdout.flush()
+            sys.stdout = stdout_backup
+            logger.info("=== Model run finished ===")
+
+    # clear previous logs and start thread
+    _clear_log_file()
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    return thread
+
+
+def _timeblock_columns(columns):
+    """Identify time block columns using patterns from config."""
+    regex_patterns = TIMEBLOCK_PATTERNS["regex"]
+    prefix_patterns = TIMEBLOCK_PATTERNS["prefix"]
+
+    # Try regex matches first
+    combined_regex = "|".join(f"({p})" for p in regex_patterns)
+    patt = re.compile(combined_regex, re.IGNORECASE)
+    cols = [c for c in columns if patt.fullmatch(c)]
+
+    if not cols:
+        # fallback to prefix matching
+        cols = [
+            c for c in columns
+            if any(c.lower().startswith(prefix) for prefix in prefix_patterns)
+        ]
+
+    return cols
+
+# def _match_patterns(column, patterns):
+#     """Check if a column matches any regex or prefix pattern."""
+#     for patt in patterns.get("regex", []):
+#         if re.fullmatch(patt, column, re.IGNORECASE):
+#             return True
+#     for prefix in patterns.get("prefix", []):
+#         if column.lower().startswith(prefix.lower()):
+#             return True
+#     return False
+
+# def _timeblock_columns(columns):
+#     """Return columns matching defined TIMEBLOCK_PATTERNS."""
+#     cols = [c for c in columns if _match_patterns(c, {"regex": TIMEBLOCK_PATTERNS["regex"]})]
+
+#     # If no regex match, fall back to prefix matching
+#     if not cols:
+#         cols = [c for c in columns if _match_patterns(c, {"prefix": TIMEBLOCK_PATTERNS["prefix"]})]
+
+#     return cols
 
 def cache_timeblock_range(columns):
     """
@@ -302,19 +429,6 @@ def _find_first_matching_column(columns, candidates, contains_mode=True):
     return None
 
 
-def _timeblock_columns(columns):
-    # Matches ImportkWhTimeBlock\d+ or Consumption_Hr_\d+ or ConsumptionHr\d+
-    patt = re.compile(r"(ImportkWhTimeBlock\d+|Consumption_?Hr_\d+|ConsumptionHr\d+)", re.IGNORECASE)
-    cols = [c for c in columns if patt.fullmatch(c)]
-    if not cols:
-        # Be more permissive: startswith patterns
-        cols = [
-            c for c in columns
-            if c.lower().startswith("importkwhtimeblock")
-            or c.lower().startswith("consumption_hr_")
-            or c.lower().startswith("consumptionhr")
-        ]
-    return cols
 
 
 def _read_distinct_months_for_consumer(path, cons_col, consumer_value, month_col):
@@ -505,6 +619,9 @@ layout = html.Div(
                 step_upload_model_param(),
                 step_run_model(),
                 step_view_results(),
+                dcc.Store(id="model-running-store", data={"running": False}),
+                dcc.Interval(id="logs-refresh-interval", interval=2000, disabled=True),  # 2s refresh
+                # html.Div(id="logs-area"),  # existing
                 dcc.Store(id="store-uploaded-file"),
                 dcc.Store(id="output-file-name-store"),
                 # dcc.Store(id="store-uploaded-file"),        # file from CSV/Excel upload
@@ -1383,106 +1500,260 @@ def register_callbacks(app):
 
 
 
+    # @app.callback(
+    #     Output("logs-area", "children", allow_duplicate=True),
+    #     Input("run-tou-button", "n_clicks"),
+    #     State("store-param-file", "data"),             # Model parameter file info
+    #     State("selected-hours-store", "data"),         # ToU bins
+    #     State("continuity-setting", "data"),           # Continuity
+    #     State("output-folder-store", "data"),          # Output folder
+    #     State("output-file-name-store", "data"),       # File name + total blocks + n_days
+    #     prevent_initial_call=True
+    # )
+    # def run_tou_model(n_clicks, model_param, tou_bins, cont_setting,
+    #                 output_folder_store, file_settings):
+
+    #     print("\n🟢 Running TOU model callback...")
+
+    #     if not n_clicks:
+    #         raise dash.exceptions.PreventUpdate
+
+
+    #     # --- Collect inputs ---
+    #     output_path = SaveDirCache.get() # if isinstance(output_folder_store, dict) else output_folder_store
+    #     customer_data_path = inputfileDirCache.get()   # path from cache
+    #     model_param_path = model_param.get("path")
+    #     output_file_name = OutputFileNameCache.get()
+        
+    #     n_historical_days = 30  
+
+    #     tb_range = TimeBlockRangeCache.get()
+    #     # Retrieve valid time range from cache
+    #     total_time_blocks_modelled = tb_range['last']
+
+    #     print("📦 Preparing model inputs...")
+    #     print(f"[TESTING RUN TOU] Customer File Path     : {customer_data_path}")
+    #     print(f"[TESTING RUN TOU] Model Param File Path  : {model_param_path}")
+    #     print(f"[TESTING RUN TOU] Output Folder          : {output_path}")
+    #     print(f"[TESTING RUN TOU] ToU Bins               : {tou_bins}")
+    #     print(f"[TESTING RUN TOU] Continuity Setting     : {cont_setting}")
+    #     print(f"[TESTING RUN TOU] Output File Name       : {output_file_name}")
+    #     # print(f"[TESTING RUN TOU] Timestamped Name       : {output_file_name_dt}")
+    #     print(f"[TESTING RUN TOU] Total Time Blocks      : {total_time_blocks_modelled}")
+    #     print(f"[TESTING RUN TOU] Historical Days        : {n_historical_days}")
+
+            
+        
+
+    #     # Load config file
+    #     config = ConfigParser()
+    #     config.read("config_gurobi.ini")
+
+    #     print(config.sections())
+
+    #     # Extract parameters
+    #     access_id = config.get("Gurobi", "WLSACCESSID")
+    #     secret = config.get("Gurobi", "WLSSECRET")
+    #     license_id = config.get("Gurobi", "LICENSEID")
+
+        
+    #     # Create Gurobi environment
+    #     env = gp.Env(empty=True)
+    #     env.setParam("WLSACCESSID", access_id)
+    #     env.setParam("WLSSECRET", secret)
+    #     env.setParam("LICENSEID", int(license_id))
+    #     env.start()
+
+    #     # --- Validate inputs ---
+    #     if not (customer_data_path):
+    #         return html.Div("⚠️ No customer data file selected.")
+    #     if not model_param_path:
+    #         return html.Div("⚠️ No model parameter file provided.")
+    #     if not tou_bins:
+    #         return html.Div("⚠️ Please select ToU Time Bands.")
+    #     if not cont_setting:
+    #         return html.Div("⚠️ Continuity setting missing.")
+    #     if not output_folder_store:
+    #         return html.Div("⚠️ Output folder not selected.")
+    #     if not output_file_name:
+    #         return html.Div("⚠️ Output file not selected.")
+    #     if not file_settings:
+    #         return html.Div("⚠️ Model settings missing (check output name or total blocks).")
+        
+        
+    #     # --- Continuity setting ---
+    #     cont_set = cont_setting.get("setting") if isinstance(cont_setting, dict) else cont_setting
+
+    #     # --- Timestamped output name ---
+    #     now = datetime.now()
+    #     datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+    #     output_file_name_dt = f"{output_file_name}_{datetime_string}"
+
+    #     # --- Prepare log buffer ---
+    #     buffer = io.StringIO()
+    #     sys_stdout_backup = sys.stdout
+    #     sys.stdout = buffer
+
+
+
+    #     try:
+    #         # --- Call your model run function ---
+    #         # pages.new_betrand_VM.run(
+    #         #     customer_data_file=customer_data_path,
+    #         #     model_input_file=model_param_path,
+    #         #     output_folder=output_path,
+    #         #     output_file_name_str=output_file_name,
+    #         #     tou_bins=sorted(tou_bins),
+    #         #     total_time_blocks_modelled=total_time_blocks_modelled,
+    #         #     cont_setting=cont_set,
+    #         #     output_file_name_by_user=output_file_name,
+    #         #     n_historical_days=n_historical_days
+    #         # )
+    #         pages.new_betrand_VM.run(
+    #             customer_data_file_path=customer_data_path,
+    #             model_input_file=model_param_path,
+    #             output_folder=output_path,
+    #             output_file_name_str=output_file_name,
+    #             tou_bins=sorted(tou_bins),
+    #             total_time_blocks_modelled=total_time_blocks_modelled,
+    #             cont_setting=cont_set,
+    #             output_file_name_by_user=output_file_name,
+    #             n_historical_days=n_historical_days,
+    #             gurobi_environment = env
+    #         )
+
+
+    #         print(f"✅ Model run complete. Output saved as: {output_file_name}.xlsx")
+    #         env.dispose()
+
+    #     except Exception as e:
+    #         print(f"❌ Error while running TOU model: {e}")
+
+    #     finally:
+    #         sys.stdout = sys_stdout_backup
+
+    #     logs = buffer.getvalue()
+    #     buffer.close()
+
+    #     return html.Pre(logs, style={"whiteSpace": "pre-wrap", "fontSize": "13px"})
+
+    # Callback that starts the model run (does NOT block)
     @app.callback(
         Output("logs-area", "children", allow_duplicate=True),
+        Output("model-running-store", "data", allow_duplicate=True),
+        Output("logs-refresh-interval", "disabled", allow_duplicate=True),
         Input("run-tou-button", "n_clicks"),
-        State("store-param-file", "data"),             # Model parameter file info
-        State("selected-hours-store", "data"),         # ToU bins
-        State("continuity-setting", "data"),           # Continuity
-        State("output-folder-store", "data"),          # Output folder
-        State("output-file-name-store", "data"),       # File name + total blocks + n_days
+        State("store-param-file", "data"),
+        State("selected-hours-store", "data"),
+        State("continuity-setting", "data"),
+        State("output-folder-store", "data"),
+        State("output-file-name-store", "data"),
         prevent_initial_call=True
     )
     def run_tou_model(n_clicks, model_param, tou_bins, cont_setting,
                     output_folder_store, file_settings):
 
-        print("\n🟢 Running TOU model callback...")
-
+        # quick guard
         if not n_clicks:
             raise dash.exceptions.PreventUpdate
 
-
-        # --- Collect inputs ---
-        output_path = SaveDirCache.get() # if isinstance(output_folder_store, dict) else output_folder_store
-        customer_data_path = inputfileDirCache.get()   # path from cache
-        model_param_path = model_param.get("path")
+        # --- collect & validate inputs (same as you had) ---
+        output_path = SaveDirCache.get()
+        customer_data_path = inputfileDirCache.get()
+        model_param_path = model_param.get("path") if model_param else None
         output_file_name = OutputFileNameCache.get()
-        
-        n_historical_days = 30  
 
-        tb_range = TimeBlockRangeCache.get()
-        # Retrieve valid time range from cache
-        total_time_blocks_modelled = tb_range['last']
-
-        print("📦 Preparing model inputs...")
-        print(f"[TESTING RUN TOU] Customer File Path     : {customer_data_path}")
-        print(f"[TESTING RUN TOU] Model Param File Path  : {model_param_path}")
-        print(f"[TESTING RUN TOU] Output Folder          : {output_path}")
-        print(f"[TESTING RUN TOU] ToU Bins               : {tou_bins}")
-        print(f"[TESTING RUN TOU] Continuity Setting     : {cont_setting}")
-        print(f"[TESTING RUN TOU] Output File Name       : {output_file_name}")
-        print(f"[TESTING RUN TOU] Timestamped Name       : {output_file_name_dt}")
-        print(f"[TESTING RUN TOU] Total Time Blocks      : {total_time_blocks_modelled}")
-        print(f"[TESTING RUN TOU] Historical Days        : {n_historical_days}")
-
-        # --- Validate inputs ---
-        if not (customer_data_path):
-            return html.Div("⚠️ No customer data file selected.")
+        if not customer_data_path:
+            return html.Div("⚠️ No customer data file selected."), {"running": False}, True
         if not model_param_path:
-            return html.Div("⚠️ No model parameter file provided.")
+            return html.Div("⚠️ No model parameter file provided."), {"running": False}, True
         if not tou_bins:
-            return html.Div("⚠️ Please select ToU Time Bands.")
+            return html.Div("⚠️ Please select ToU Time Bands."), {"running": False}, True
         if not cont_setting:
-            return html.Div("⚠️ Continuity setting missing.")
+            return html.Div("⚠️ Continuity setting missing."), {"running": False}, True
         if not output_folder_store:
-            return html.Div("⚠️ Output folder not selected.")
+            return html.Div("⚠️ Output folder not selected."), {"running": False}, True
         if not output_file_name:
-            return html.Div("⚠️ Output file not selected.")
+            return html.Div("⚠️ Output file not selected."), {"running": False}, True
         if not file_settings:
-            return html.Div("⚠️ Model settings missing (check output name or total blocks).")
-        
-        
-        # --- Continuity setting ---
-        cont_set = cont_setting.get("setting") if isinstance(cont_setting, dict) else cont_setting
+            return html.Div("⚠️ Model settings missing (check output name or total blocks)."), {"running": False}, True
 
-        # --- Timestamped output name ---
-        now = datetime.now()
-        datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
-        output_file_name_dt = f"{output_file_name}_{datetime_string}"
-
-        # --- Prepare log buffer ---
-        buffer = io.StringIO()
-        sys_stdout_backup = sys.stdout
-        sys.stdout = buffer
-
-
-
+        # --- prepare gurobi env (same as your code) ---
+        config = ConfigParser()
+        config.read("config_gurobi.ini")
         try:
-            # --- Call your model run function ---
-            pages.new_betrand_VM.run(
-                customer_data_file=customer_data_path,
-                model_input_file=model_param_path,
-                output_folder=output_path,
-                output_file_name_str=output_file_name_dt,
-                tou_bins=sorted(tou_bins),
-                total_time_blocks_modelled=total_time_blocks_modelled,
-                cont_setting=cont_set,
-                output_file_name_by_user=output_file_name,
-                n_historical_days=n_historical_days
-            )
-
-            print(f"✅ Model run complete. Output saved as: {output_file_name_dt}.xlsx")
-
+            access_id = config.get("Gurobi", "WLSACCESSID")
+            secret = config.get("Gurobi", "WLSSECRET")
+            license_id = config.get("Gurobi", "LICENSEID")
         except Exception as e:
-            print(f"❌ Error while running TOU model: {e}")
+            logger.exception("Failed to read Gurobi config: %s", e)
+            return html.Div("⚠️ Gurobi config missing or invalid."), {"running": False}, True
 
-        finally:
-            sys.stdout = sys_stdout_backup
+        env = gp.Env(empty=True)
+        env.setParam("WLSACCESSID", access_id)
+        env.setParam("WLSSECRET", secret)
+        env.setParam("LICENSEID", int(license_id))
+        env.start()
 
-        logs = buffer.getvalue()
-        buffer.close()
+        # additional args for model
+        cont_set = cont_setting.get("setting") if isinstance(cont_setting, dict) else cont_setting
+        tb_range = TimeBlockRangeCache.get()
+        total_time_blocks_modelled = tb_range['last']
+        n_historical_days = 30
 
-        return html.Pre(logs, style={"whiteSpace": "pre-wrap", "fontSize": "13px"})
+        # Build kwargs exactly as pages.new_betrand_VM.run expects
+        run_kwargs = dict(
+            customer_data_file_path=customer_data_path,
+            model_input_file=model_param_path,
+            output_folder=output_path,
+            output_file_name_str=output_file_name,
+            tou_bins=sorted(tou_bins),
+            total_time_blocks_modelled=total_time_blocks_modelled,
+            cont_setting=cont_set,
+            output_file_name_by_user=output_file_name,
+            n_historical_days=n_historical_days,
+            gurobi_environment=env
+        )
+
+        # Start background thread
+        _run_model_in_thread(**run_kwargs)
+
+        # Return initial UI and enable interval polling
+        initial_text = html.Pre("Model started — logs will appear below as they are produced...\n", style={"whiteSpace": "pre-wrap", "fontSize": "13px"})
+        return initial_text, {"running": True}, False
+
+    @app.callback(
+        Output("logs-area", "children",allow_duplicate=True),
+        Output("logs-refresh-interval", "disabled", allow_duplicate=True),
+        Output("model-running-store", "data", allow_duplicate=True),
+        Input("logs-refresh-interval", "n_intervals"),
+        State("model-running-store", "data"),
+        prevent_initial_call=True
+    )
+    def refresh_logs(n_intervals, running_store):
+        running = running_store.get("running", False) if running_store else False
+
+        # read logs (safe even if file missing)
+        try:
+            with open(LOG_PATH, "r", encoding="utf-8") as f:
+                logs = f.read()
+        except FileNotFoundError:
+            logs = ""
+
+        # If model not running, keep interval disabled and return final logs
+        if not running:
+            return html.Pre(logs, style={"whiteSpace": "pre-wrap", "fontSize": "13px"}), True, {"running": False}
+
+        # If running, keep polling
+        # Heuristic to detect end: look for "=== Model run finished ===" message in logs
+        finished = " ✅  ✅  ✅  ✅ Model run finished  ✅  ✅  ✅  ✅ " in logs
+
+        if finished:
+            # mark run finished so next call will disable interval
+            return html.Pre(logs, style={"whiteSpace": "pre-wrap", "fontSize": "13px"}), True, {"running": False}
+
+        # still running — return logs and keep interval enabled
+        return html.Pre(logs, style={"whiteSpace": "pre-wrap", "fontSize": "13px"}), False, {"running": True}
 
 
 
