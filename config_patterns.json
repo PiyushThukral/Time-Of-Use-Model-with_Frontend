@@ -1,0 +1,14 @@
+{
+    "TIMEBLOCK_PATTERNS": {
+        "regex": [
+            "ImportkWhTimeBlock\\d+",
+            "Consumption_?Hr_\\d+",
+            "ConsumptionHr\\d+"
+        ],
+        "prefix": [
+            "importkwhtimeblock",
+            "consumption_hr_",
+            "consumptionhr"
+        ]
+    }
+}
