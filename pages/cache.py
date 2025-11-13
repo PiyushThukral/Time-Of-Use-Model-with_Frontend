@@ -170,3 +170,26 @@ class TouBinsCache:
         print("[CACHE] Cleared ToU bins cache.")
 
 
+class ConsumptionValuesCache:
+    cons_vals = None
+
+    @classmethod
+    def set(cls, consumption_value_list):
+        """Store the selected ToU bin values."""
+        if not isinstance(consumption_value_list, (list, tuple)):
+            raise ValueError("ToU bins must be a list or tuple of integers.")
+        cls.cons_vals = consumption_value_list
+        print(f"[CACHE] Stored ")
+
+    @classmethod
+    def get(cls):
+        """Retrieve the currently stored ToU bin values."""
+        if cls.cons_vals is None:
+            print("[CACHE] Not stored yet.")
+        return cls.cons_vals
+
+    @classmethod
+    def clear(cls):
+        """Clear the stored ToU bin values."""
+        cls.cons_vals = None
+        print("[CACHE] Cleared cache.")

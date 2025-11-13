@@ -26,7 +26,7 @@ class ConsumerClusterer:
                          including its hourly profile and static info.
     """
 
-    def __init__(self, raw_df: pd.DataFrame, group_list, distance_metric, opt_flag, num_clusters):
+    def __init__(self, raw_df: pd.DataFrame, group_list, distance_metric, opt_flag, num_clusters, consumption_cols = None, time_blocks = None):
     #def __init__(self, raw_df: pd.DataFrame, group_list, distance_metric):
         """
         Parameters:
@@ -50,11 +50,18 @@ class ConsumerClusterer:
 
         self.group_list = group_list
         # Define which columns are “static” vs. “hourly‐consumption”
+
+
         self.relevant_cols = [
-            'Date', 'Consumer No', 'Meter No', 'Sanctioned_Load_KW',
-            'Category', 'MeterPhase_Name','total_monthly_consumption'
+            'Date', 'Consumer No', 'Sanctioned_Load_KW',
+            'Category','total_monthly_consumption'
         ]
-        self.consumption_cols = [f'Consumption_Hr_{i}' for i in range(1, 25)]
+
+
+        if consumption_cols is None or len(consumption_cols) == 0:
+            self.consumption_cols = [f'Consumption_Hr_{i}' for i in range(time_blocks['first'], time_blocks['last'] + 1)]
+        else:
+            self.consumption_cols = consumption_cols
 
     def _flag_consumption(self):
         """

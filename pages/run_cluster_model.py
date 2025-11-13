@@ -2,7 +2,7 @@ from dash import html, dcc, Output, Input, callback, Dash
 from steps_module_cluster import step_upload_data, step_select_output_folder , view_cluster_tabs , step_select_tou_dynamicity, select_tou_bins, first_last_continuity, step_upload_model_param, step_run_model, step_view_results
 import dash
 import plotly.graph_objs as go
-from pages.cache import inputfileDirCache , SaveDirCache , ToUDynamicityCache , RepProfileCache , model_param_Cache , OutputFileNameCache, ClusterfileDirCache
+from pages.cache import inputfileDirCache , SaveDirCache , ToUDynamicityCache , RepProfileCache , model_param_Cache , OutputFileNameCache, ClusterfileDirCache, ConsumptionValuesCache
 import sys
 from sklearn.ensemble import IsolationForest
 import pages
@@ -15,6 +15,7 @@ from dash import html, dcc, ctx
 from pages.run_individual_model import extract_and_cache_consumers
 from pages.cache import ConsumerListCache, TimeBlockRangeCache, TouBinsCache
 import re
+from config import CONSUMER_PATTERNS, CATEGORY_PATTERNS, CONNECTED_LOAD_PATTERNS, TIMEBLOCK_PATTERNS
 
 ## Logic is as follows:
 # 1. User uploads data. if he isn't sure of format, he can download and see required format
@@ -23,13 +24,7 @@ import re
 # 4. Then, remaining is as per run individual model
 
 
-import json
-
-# Load from config file
-with open("config_patterns.json", "r") as f:
-    config = json.load(f)
-
-time_block_patterns = config["TIMEBLOCK_PATTERNS"]
+time_block_patterns = TIMEBLOCK_PATTERNS['TIMEBLOCK_PATTERNS']
 
 def _timeblock_columns(columns, TIMEBLOCK_PATTERNS):
     """Identify time block columns using patterns from config."""
@@ -49,6 +44,8 @@ def _timeblock_columns(columns, TIMEBLOCK_PATTERNS):
         ]
 
     return cols
+
+
 
 
 def cache_timeblock_range(columns, time_block_patterns):
@@ -424,13 +421,15 @@ def register_callbacks(app):
                     df_preview = pd.read_csv(file_path)
                     print(f"[INFO] CSV file loaded successfully. Columns: {list(df_preview.columns)}")
 
-                    cache_timeblock_range(columns = df_preview.columns)
+                    cache_timeblock_range(columns = df_preview.columns, time_block_patterns= time_block_patterns)
+
 
                 elif file_path.lower().endswith((".xlsx", ".xls")):
                     df_preview = pd.read_excel(file_path)
                     print(f"[INFO] Excel file loaded successfully. Columns: {list(df_preview.columns)}")
 
-                    cache_timeblock_range(columns=df_preview.columns)
+                    cache_timeblock_range(columns=df_preview.columns, time_block_patterns = time_block_patterns)
+                    print(TimeBlockRangeCache.get())
 
                 else:
                     print("[WARN] Unsupported file format for preview.")
@@ -445,7 +444,6 @@ def register_callbacks(app):
             err = f"❌ Error selecting file: {e}"
             return html.Div(err, style={"color": "red"}), html.Div(err)
 
-
     @app.callback(
         Output("duckdb-path-status1", "children"),
         Output("logs-area1", "children", allow_duplicate=True),
@@ -456,6 +454,9 @@ def register_callbacks(app):
         """Open DuckDB file picker safely from a background thread."""
         result_queue = queue.Queue()
 
+        # -------------------------------
+        # Ask user for file path
+        # -------------------------------
         def open_dialog(q):
             import tkinter as tk
             from tkinter import filedialog
@@ -478,50 +479,73 @@ def register_callbacks(app):
 
         t = threading.Thread(target=open_dialog, args=(result_queue,), daemon=True)
         t.start()
-        t.join(timeout=60)  # wait for user to finish selecting
+        t.join()
 
         duck_path = result_queue.get() if not result_queue.empty() else None
+
+        # -----------------------------------
+        # No file selected → immediate return
+        # -----------------------------------
         if not duck_path or isinstance(duck_path, str) and duck_path.startswith("Error:"):
-            msg = "❌ No file selected or dialog cancelled."
+            msg = "❌ No file selected."
             return html.Div(msg, style={"color": "red"}), html.Div(msg)
 
-        # ✅ Cache path
-        inputfileDirCache.set(duck_path)
-        print(f"[VERIFY DUCKDB TEST] Cache now holds: {inputfileDirCache.get()}")
-        # ✅ Extract and cache consumers
-        extract_and_cache_consumers(duck_path)
-        print(f"[CACHE] DuckDB file set: {duck_path}")
-        # ✅ Quick read check — verify file, table, and columns
-        try:
-            import duckdb
+        # -----------------------------------------------
+        # IMMEDIATE return to update UI / logs instantly
+        # -----------------------------------------------
+        immediate_log = f"📁 File selected: {duck_path}. Processing..."
+        status_msg = f"✅ Selected DuckDB file: {duck_path}"
 
-            con = duckdb.connect(duck_path, read_only=True)
-            tables = con.execute("SHOW TABLES").fetchall()
+        # Return immediately so logs update
+        # -----------------------------------------------
+        # **Fire background processing thread**
+        # -----------------------------------------------
+        def background_work(path):
+            try:
+                print("[THREAD] Background processing started...")
 
-            if not tables:
-                print("[WARN] No tables found in the DuckDB file.")
-            else:
-                table_name = tables[0][0]
-                df_preview = con.execute(f"SELECT * FROM {table_name} LIMIT 5").fetchdf()
-                print(f"[INFO] DuckDB file read OK. Using table: '{table_name}'")
-                print(f"[INFO] Columns: {list(df_preview.columns.to_list()[10])}")
-                print(f"[INFO] Unique Consumers: {df_preview['CONS_NO'].unique()}")
-                unique_consumers = df_preview['CONS_NO'].unique()
+                # Store path
+                inputfileDirCache.set(path)
 
-                cache_timeblock_range(columns=df_preview.columns, time_block_patterns = time_block_patterns)
+                # Extract consumers
+                extract_and_cache_consumers(path)
 
-                del df_preview
+                # Verify DuckDB
+                import duckdb
+                con = duckdb.connect(path, read_only=True)
+                tables = con.execute("SHOW TABLES").fetchall()
+                if tables:
+                    table_name = tables[0][0]
+                    df_preview = con.execute(
+                        f"SELECT * FROM {table_name} LIMIT 5"
+                    ).fetchdf()
 
+                    cache_timeblock_range(
+                        df_preview.columns,
+                        time_block_patterns=time_block_patterns
+                    )
 
-            con.close()
+                con.close()
 
-        except Exception as e:
-            print(f"[ERROR] Failed to read DuckDB file: {e}")
+                # LOG SUCCESS
+                final_msg = f"✅ DuckDB verified and cached successfully: {path}"
+                print("[LOG]", final_msg)
 
+            except Exception as e:
+                final_msg = f"❌ DuckDB processing failed: {e}"
+                print("[LOG]", final_msg)
 
-        msg = f"✅ Selected DuckDB file: {duck_path}"
-        return html.Div(msg, style={"color": "#134A94"}), html.Div(f"✅ File path saved: {duck_path}")
+        threading.Thread(
+            target=background_work,
+            args=(duck_path,),
+            daemon=True
+        ).start()
 
+        # UI gets updated immediately (without waiting)
+        return (
+            html.Div(status_msg, style={"color": "#134A94"}),
+            html.Div(immediate_log),
+        )
 
     #############################
     ####### STEP 2 ############## SELECT OUTPUT DIRECTORY
@@ -598,12 +622,6 @@ def register_callbacks(app):
     )
     def update_distribution_plot(selected_attribute, uploaded_data):
         logs = []
-
-        CONSUMER_PATTERNS = ["consumer", "cons_no", "cons no", "cons", "consumer_no", "consumer_number"]
-        CATEGORY_CANDIDATES = ["category", "category_code", "category code", "categorycode", "category_name"]
-        CONNECTED_LOAD_CANDIDATES = ["connected_load", "connected load", "sanctioned_load_kw", "sanctioned load",
-                                     "sanctioned_load", "sanctioned load kw"]
-
 
         try:
             fp = inputfileDirCache.get()  # full path to the uploaded file
@@ -697,7 +715,7 @@ def register_callbacks(app):
 
                 else:
 
-                    matched_cols = [c for c in df_columns if any(p in c.lower() for p in CONNECTED_LOAD_CANDIDATES)]
+                    matched_cols = [c for c in df_columns if any(p in c.lower() for p in CONNECTED_LOAD_PATTERNS)]
 
                     if 'sanctioned_load_bin' not in df.columns:
                         #bins = [0, 1, 2, 3, 5, 10, 20, 50, 100, float('inf')]
@@ -714,6 +732,9 @@ def register_callbacks(app):
 
             elif selected_attribute == 'monthly_consumption':
                 consumption_cols = _timeblock_columns(columns = df.columns, TIMEBLOCK_PATTERNS = time_block_patterns)
+
+                ConsumptionValuesCache.set(consumption_cols)
+
                 print(consumption_cols)
                 #consumption_cols = [col for col in df.columns if col.startswith('Consumption_Hr_')]
                 #df['Year'] = df['Date'].dt.year
@@ -772,7 +793,7 @@ def register_callbacks(app):
 
                 else:
 
-                    matched_category = [c for c in df_columns if any(p in c.lower() for p in CATEGORY_CANDIDATES)]
+                    matched_category = [c for c in df_columns if any(p in c.lower() for p in CATEGORY_PATTERNS)]
                     if len(matched_category) > 0:
                         group_col = matched_category[0]
                         x_label = matched_category[0]
@@ -879,40 +900,88 @@ def register_callbacks(app):
         logs = []    
         print("Testing plot_clusters function.....")
 
-        #if not any([gen_button, group_list, distance_metric, number_cluster, opt_cluster_flag, input_data]):
-        #    return no_update
-
         if not any([gen_button, distance_metric, number_cluster, opt_cluster_flag, input_data]):
             return no_update, html.Div("Please Provide all inputs")
 
 
-        #data = pd.read_csv(input_data.get("path"))
-
         fp = inputfileDirCache.get()  # full path to the uploaded file
+
+        data = pd.DataFrame()
+        df = pd.DataFrame()
+        db_consumption_cols = []
+
 
         if fp.endswith(".csv"):
             data = pd.read_csv(fp)
+            df = make_monthly_cons.compute_monthly_consumption(data, consumption_cols=None)
             #logs.append("✅ Reading input csv file.")
         elif fp.endswith(".xls") or fp.endswith(".xlsx"):
             data = pd.read_excel(fp, engine='openpyxl')
             #logs.append("✅ Reading input excel file.")
-        #else:
-            #logs.append("❌ Unsupported file format.")
-            #return go.Figure(), html.Ul([html.Li(log) for log in logs])
+            df = make_monthly_cons.compute_monthly_consumption(data, consumption_cols= None)
+        elif fp.endswith(".duckdb") or fp.endswith(".db"):
+
+            import duckdb
+            try:
+                # Connect to DuckDB and read all tables or a specific one
+                con = duckdb.connect(database=fp, read_only=True)
+
+                # List all tables in the DuckDB file
+                tables = con.execute("SHOW TABLES").fetchall()
+                logs.append(f"📋 Tables found: {[t[0] for t in tables]}")
+
+                if tables:
+                    # Read the first table by default (you can modify this)
+                    table_name = tables[0][0]
+                    data = con.execute(f"SELECT * FROM {table_name}").fetchdf()
+                    data_columns = data.columns
+                    # DB Group List
 
 
+                    matched_sanctioned_load = [c for c in data_columns if any(p in c.lower() for p in CONNECTED_LOAD_PATTERNS)]
 
-        df = make_monthly_cons.compute_monthly_consumption(data)
+                    matched_category = [c for c in data_columns if
+                                               any(p in c.lower() for p in CATEGORY_PATTERNS)]
+
+                    matched_consumer_no = [c for c in data_columns if
+                                               any(p in c.lower() for p in CONSUMER_PATTERNS)]
+
+                    rename_map = {
+                        matched_sanctioned_load[0]: "Sanctioned_Load_KW" if matched_sanctioned_load else None,
+                        matched_category[0]: "Category" if matched_category else None,
+                        matched_consumer_no[0]: "Consumer No" if matched_consumer_no else None,
+                    }
+
+                    # Drop None keys (if some lists were empty)
+                    rename_map = {k: v for k, v in rename_map.items() if k is not None}
+
+                    data = data.rename(columns = rename_map)
+
+                    db_consumption_cols = _timeblock_columns(columns=data.columns, TIMEBLOCK_PATTERNS=time_block_patterns)
+                    ConsumptionValuesCache.set(db_consumption_cols)
+
+                    df = make_monthly_cons.compute_monthly_consumption(data, consumption_cols=db_consumption_cols)
+            except:
+                #data = pd.DataFrame()
+                logs.append("❌ No tables found in DuckDB file.")
+
 
         if not group_list:
             group_list = ['Category', 'Sanctioned_Load_KW', 'monthly_consumption']
 
-        print("2 Testing plot_clusters function.....")
+        tb_range = TimeBlockRangeCache.get()
+        # Retrieve valid time range from cache
 
-        #clusterer = clustering.ConsumerClusterer(raw_df=df, group_list=group_list, distance_metric = distance_metric)
-        
-        clusterer = clustering.ConsumerClusterer(raw_df=df, group_list=group_list, distance_metric = distance_metric,
-                                                 opt_flag = opt_cluster_flag, num_clusters = number_cluster)
+        new_df = df.dropna()
+
+        print(f"CLUSTERING DF DIFF is {len(new_df) - len(df)} ROWS")
+        clusterer = clustering.ConsumerClusterer(raw_df= new_df,
+                                                 group_list=group_list,
+                                                 distance_metric = distance_metric,
+                                                 opt_flag = opt_cluster_flag,
+                                                 num_clusters = number_cluster,
+                                                 consumption_cols = db_consumption_cols,
+                                                 time_blocks = tb_range)
         
         clusterer.fit()
 
@@ -1094,7 +1163,10 @@ def register_callbacks(app):
                                                     final_medoid_data = medoid_df,
                                                     category = category,
                                                     load_bin = load_bin,
-                                                    consumption_bin = cons_bin)
+                                                    consumption_bin = cons_bin,
+                                                      time_blocks = TimeBlockRangeCache.get(),
+                                                      consumption_values = ConsumptionValuesCache.get()
+                                                      )
 
         return fig
 

@@ -5,7 +5,9 @@ def get_cluster_plot_figure(
     final_medoid_data,
     category,
     load_bin,
-    consumption_bin
+    consumption_bin,
+    time_blocks,
+    consumption_values
 ):
     """
     Returns a Plotly figure for a given category, load_bin, and consumption_bin.
@@ -60,15 +62,19 @@ def get_cluster_plot_figure(
 
 
 
-    hours = list(range(1, 25))
+    hours = list(range(time_blocks['first'], time_blocks['last'] + 1))
     fig = go.Figure()
+
 
     # Plot all consumer profiles in grey
     for _, row in cluster_subset.iterrows():
-        consumption_values = [row[f'Consumption_Hr_{h}'] for h in hours]
+        if consumption_values is None:
+            cons_values = [row[f'Consumption_Hr_{h}'] for h in hours]
+        else:
+            cons_values = [row[col] for col in consumption_values]
         fig.add_trace(go.Scatter(
             x=hours,
-            y=consumption_values,
+            y=cons_values,
             mode='lines',
             line=dict(color='grey', width=1),
             opacity=0.5,
@@ -78,10 +84,13 @@ def get_cluster_plot_figure(
     # Plot medoid profiles in black
     if not medoid_subset.empty:
         for _, row in medoid_subset.iterrows():
-            consumption_values = [row[f'Consumption_Hr_{h}'] for h in hours]
+            if consumption_values is None:
+                cons_values = [row[f'Consumption_Hr_{h}'] for h in hours]
+            else:
+                cons_values = [row[col] for col in consumption_values]
             fig.add_trace(go.Scatter(
                 x=hours,
-                y=consumption_values,
+                y=cons_values,
                 mode='lines',
                 line=dict(color='black', width=3),
                 #name='Medoid',

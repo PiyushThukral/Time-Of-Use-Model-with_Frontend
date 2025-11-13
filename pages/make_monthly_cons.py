@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def compute_monthly_consumption(df):
+def compute_monthly_consumption(df, consumption_cols = None):
     """
     Adds a 'total_monthly_consumption' column to the DataFrame by summing daily consumption
     across all 'Consumption_Hr_' columns, grouped by Consumer No, Year, and Month.
@@ -13,9 +13,13 @@ def compute_monthly_consumption(df):
 
     try:
         # Identify hourly consumption columns
-        consumption_cols = [col for col in df.columns if col.startswith('Consumption_Hr_')]
+        if consumption_cols is None:
+            consumption_cols = [col for col in df.columns if col.startswith('Consumption_Hr_')]
+
+
+
         if not consumption_cols:
-            print("❌ No consumption columns found.")
+            print("❌ No consumption hr columns found.")
             return df
 
         # Convert 'Date' column to datetime
