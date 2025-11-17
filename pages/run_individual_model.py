@@ -44,10 +44,8 @@ model_running = False
 # -------------------------
 # Helpers
 # -------------------------
-CONSUMER_PATTERNS = ["consumer", "cons_no", "cons no", "cons", "consumer_no", "consumer_number"]
-MONTH_CANDIDATES = ["month"]  # case-insensitive match
-CATEGORY_CANDIDATES = ["category", "category_code", "category code", "categorycode", "category_name"]
-CONNECTED_LOAD_CANDIDATES = ["connected_load", "connected load", "sanctioned_load_kw", "sanctioned load", "sanctioned_load"]
+
+from config import CONSUMER_PATTERNS, CATEGORY_PATTERNS, CONNECTED_LOAD_PATTERNS, TIMEBLOCK_PATTERNS
 
 
 
@@ -1142,11 +1140,13 @@ def register_callbacks(app):
         # 1️⃣ Read consumer-specific data (already filtered by consumer_id)
         # ----------------------------------------------------------------
         df = get_consumer_data(selected_consumer)
+        df_columns = df.columns
         if df.empty:
             fig = go.Figure().update_layout(
                 title=f"⚠️ No data found for Consumer: {selected_consumer}",
                 template="plotly_white"
             )
+            df_columns = []
             return fig, f"⚠️ No data found for {selected_consumer}"
 
         # # ----------------------------------------------------------------
@@ -1178,7 +1178,16 @@ def register_callbacks(app):
         # ----------------------------------------------------------------
         # 4️⃣ Identify metadata columns for info display
         # ----------------------------------------------------------------
-        meta_cols = [c for c in df.columns if any(k in c.lower() for k in ["category", "connected", "load"])]
+
+        matched_category = [c for c in df_columns if any(p in c.lower() for p in CATEGORY_PATTERNS)]
+        matched_load = [c for c in df_columns if any(p in c.lower() for p in CONNECTED_LOAD_PATTERNS)]
+
+        meta_cols = [matched_category[0], matched_load[0]]
+
+
+        print(f'META COLS AREREEEEEEEEEEEEEEEEEEEEEEEE - {meta_cols}')
+
+        #meta_cols = [c for c in df.columns if any(k in c.lower() for k in ["category", "connected", "load"])]
         meta_info = {}
         for c in meta_cols:
             val = df[c].iloc[0] if c in df.columns and not df[c].empty else None
@@ -1232,15 +1241,93 @@ def register_callbacks(app):
         # ----------------------------------------------------------------
         info_text = f"""
         📊 **Consumer No:** {selected_consumer}  
-        🏷️ **Category:** {meta_info.get('category', 'N/A')}  
-        ⚡ **Connected Load:** {meta_info.get('connected_load', 'N/A')}
+        🏷️ **Category:** {meta_info.get(matched_category[0], 'N/A')}  
+        ⚡ **Connected Load:** {meta_info.get(matched_load[0], 'N/A')}
         """
         # 📅 **Month:** {selected_month if selected_month else 'All'} 
 
         return fig, info_text
 
+    @app.callback(
+        Output("profile-graph", "figure", allow_duplicate=True),
+        #Output("profile-info", "children", allow_duplicate=True),
+        Input("btn-view-rep-profile", "n_clicks"),
+        State("consumer-dropdown", "value"),
+        State("profile-graph", "figure"),
+        prevent_initial_call=True
+    )
+
+    def overlay_median_profile(n_clicks,consumer_no, current_fig):
+
+        iso_forest = IsolationForest(contamination=0.5, random_state=42)
 
 
+        df = get_consumer_data(consumer_no)
+        if df.empty:
+            fig = go.Figure().update_layout(
+                title=f"⚠️ No data found for Consumer: {consumer_no}",
+                template="plotly_white"
+            )
+            #return fig, f"⚠️ No data found for {consumer_no}"
+            return fig
+
+        if df is None or not all([consumer_no]):
+            raise dash.exceptions.PreventUpdate
+
+        filtered_df = df.copy()
+
+        if consumer_no is not None:
+            filtered_df = filtered_df[filtered_df['Consumer No'].astype(str) == str(consumer_no)]
+
+        hr_cols = _timeblock_columns(df.columns)
+        cache_timeblock_range(df.columns)
+        tb_range = TimeBlockRangeCache.get()
+        print(f"[TEST] The hour_cols are {hr_cols}")
+        print(f"[TEST CACHE COMMAND] First block: {tb_range['first']}, Last block: {tb_range['last']}")
+        if not hr_cols:
+            fig = go.Figure().update_layout(
+                title="⚠️ No time-block columns found (expected ImportkWhTimeBlock or Consumption_Hr_)",
+                template="plotly_white"
+            )
+            #return fig, "⚠️ No valid time-block data available."
+            return fig
+
+        # Sort columns numerically (important for consistent x-axis)
+        hr_cols = sorted(hr_cols, key=lambda x: int(re.findall(r"\d+", x)[0]))
+
+        outlier_labels = iso_forest.fit_predict(filtered_df[hr_cols])
+        inliers = filtered_df[outlier_labels == 1]
+        if inliers.empty:
+            return None
+        inliers_rep_profile = inliers[hr_cols].median()
+        #median_profile.name = consumer_id
+
+        # Compute median profile
+        #median_profile = filtered_df[hr_cols].median()
+
+        # Extract hour numbers
+        #hours = [int(c.split("_")[-1]) for c in hr_cols]
+
+        fig = go.Figure(current_fig)
+        if not n_clicks:
+        # Load existing figure
+            return fig
+
+        else:
+
+            # Add median profile as a bold red line
+            fig.add_trace(go.Scatter(
+                x= list(range(1, len(hr_cols) + 1)),
+                y=inliers_rep_profile.values,
+                mode="lines",
+                name="Representative Profile",
+                line=dict(color="black", width=4, dash="dash"),
+                marker=dict(size=6),
+                hoverinfo="x+y+name"
+            ))
+
+            #return fig, "Plotted Median Profile"
+            return fig
 
     #############################
     ####### STEP 4 ############## SELECT TOU DYNAMICITY

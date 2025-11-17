@@ -248,6 +248,25 @@ def view_customer_profile():
                 disabled=True,
                 style={"marginBottom": "15px"}
             ),
+
+            # Button for representative profile
+            html.Button(
+                "View Representative Profile",
+                id="btn-view-rep-profile",
+                n_clicks=0,
+                style={
+                    "marginTop": "10px",
+                    "marginBottom": "15px",
+                    "backgroundColor": "#007BFF",
+                    "color": "white",
+                    "fontWeight": "600",
+                    "borderRadius": "5px",
+                    "padding": "8px 15px",
+                    "border": "none",
+                    "cursor": "pointer"
+                }
+            ),
+
         ], style={
             "display": "flex",
             "flexDirection": "column",
