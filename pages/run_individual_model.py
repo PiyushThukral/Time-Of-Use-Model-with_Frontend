@@ -1275,12 +1275,17 @@ def register_callbacks(app):
             raise dash.exceptions.PreventUpdate
 
         filtered_df = df.copy()
+        df_columns = filtered_df.columns
+        #matched_category = [c for c in df_columns if any(p in c.lower() for p in CATEGORY_PATTERNS)]
+        matched_consumer_no = [c for c in df_columns if any(p in c.lower() for p in CONSUMER_PATTERNS)]
 
-        if consumer_no is not None:
-            filtered_df = filtered_df[filtered_df['Consumer No'].astype(str) == str(consumer_no)]
+        if matched_consumer_no and consumer_no is not None:
+            col = matched_consumer_no[0]
+            #filtered_df = filtered_df[filtered_df[col].astype(str) == str(consumer_no)]
+            filtered_df = filtered_df[filtered_df[col] == consumer_no]
 
-        hr_cols = _timeblock_columns(df.columns)
-        cache_timeblock_range(df.columns)
+        hr_cols = _timeblock_columns(df_columns)
+        cache_timeblock_range(df_columns)
         tb_range = TimeBlockRangeCache.get()
         print(f"[TEST] The hour_cols are {hr_cols}")
         print(f"[TEST CACHE COMMAND] First block: {tb_range['first']}, Last block: {tb_range['last']}")
