@@ -969,6 +969,9 @@ def register_callbacks(app):
         if not group_list:
             group_list = ['Category', 'Sanctioned_Load_KW', 'monthly_consumption']
 
+        if 'Category' not in group_list:
+            group_list.append("Category")
+
         tb_range = TimeBlockRangeCache.get()
         # Retrieve valid time range from cache
 
@@ -1026,18 +1029,20 @@ def register_callbacks(app):
 
         print("1 Testing populate_dropdowns function.....")
 
-        if 'Category' in group_list:
+        #if 'Category' in group_list:
         # data = clustered_json.get("clustered_data")
         # clustered_df = pd.read_json(data, orient='split')
-            print("1 Testing populate_dropdowns function.....")
+        print("1 Testing populate_dropdowns function.....")
 
-            data = clustered_json.get("clustered_data")
-            clustered_df = pd.read_json(data, orient='split')
+        data = clustered_json.get("clustered_data")
+        clustered_df = pd.read_json(data, orient='split')
 
-            cat_opts = [{'label': i, 'value': i} for i in sorted(clustered_df['Category'].dropna().unique())]
-            return cat_opts
-        else:
-            return []
+        cat_opts = [{'label': i, 'value': i} for i in sorted(clustered_df['Category'].dropna().unique())]
+        return cat_opts
+
+
+        # else:
+        #     return []
 
         # cat_opts = [{'label': i, 'value': i} for i in sorted(clustered_df['Category'].dropna().unique())]
         #load_opts = [{'label': i, 'value': i} for i in sorted(clustered_df['load_bin'].dropna().unique())]
