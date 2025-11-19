@@ -10,6 +10,8 @@ import pandas as pd
 import os
 import io
 
+from pages.cache import TimeBlockRangeCache, TimeBlockRangeCacheCompareLeft, TimeBlockRangeCacheCompareRight
+
 import dash
 from dash import dcc, html
 
@@ -410,9 +412,22 @@ def register_callbacks(app):
                 net_savings_pct = ""
                 net_change_profit = ""
 
-            tcols = [f"Hour_{i}" for i in range(1, 25)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
-            x_vals = list(range(1, 25))
+            tb_range = TimeBlockRangeCache.get()
+
+            if tb_range["first"] is None or tb_range["last"] is None:
+                # detect existing TB columns from dataset
+                tcols = sorted([col for col in sub_original.columns if col.startswith("TB_")],
+                               key=lambda c: int(c.split("_")[1]))
+                x_vals = list(range(1, len(tcols) + 1))
+                tariff_cols = [f"Tariff_{i}" for i in range(1, len(tcols) + 1)]
+
+            else:
+                first_tb = tb_range["first"] or 1
+                last_tb = tb_range["last"]
+
+                tcols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                tariff_cols = [f"Tariff_{i}" for i in range(first_tb, last_tb + 1)]
+                x_vals = list(range(first_tb, last_tb + 1))
 
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -543,9 +558,23 @@ def register_callbacks(app):
             else:
                 net_change_profit = ""
 
-            tcols = [f"Hour_{i}" for i in range(1, 25)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
-            x_vals = list(range(1, 25))
+
+            tb_range = TimeBlockRangeCache.get()
+            if tb_range["first"] is None or tb_range["last"] is None:
+                # detect existing TB columns from dataset
+                tcols = sorted([col for col in sub_original.columns if col.startswith("TB_")],
+                               key=lambda c: int(c.split("_")[1]))
+                x_vals = list(range(1, len(tcols) + 1))
+                tariff_cols = [f"Tariff_{i}" for i in range(1, len(tcols) + 1)]
+
+            else:
+                first_tb = tb_range["first"] or 1
+                last_tb = tb_range["last"]
+
+                tcols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                tariff_cols = [f"Tariff_{i}" for i in range(first_tb, last_tb + 1)]
+                x_vals = list(range(first_tb, last_tb + 1))
+
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -615,7 +644,24 @@ def register_callbacks(app):
 
             try:
                 sheet_df = output
-                cols = [f'Hour_{i}' for i in range(1, 25)]
+                #cols = [f'Hour_{i}' for i in range(1, 25)]
+
+                tb_range = TimeBlockRangeCache.get()
+
+                if tb_range["first"] is None or tb_range["last"] is None:
+                    # detect existing TB columns from dataset
+                    cols = sorted([col for col in sheet_df.columns if col.startswith("TB_")],
+                                   key=lambda c: int(c.split("_")[1]))
+                    tcol = [i+1 for i in range(len(cols))]
+
+                else:
+                    first_tb = tb_range["first"] or 1
+                    last_tb = tb_range["last"]
+
+                    cols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                    tcol = [i + 1 for i in range(len(cols))]
+
+
                 before_opt = sheet_df[sheet_df['Type'] == 'Before Optimization'].copy()
                 after_opt = sheet_df[sheet_df['Type'] == 'After Optimization'].copy()
 
@@ -637,19 +683,22 @@ def register_callbacks(app):
 
 
                 # Optional: Format Hour column to be numeric (Hour_1 → 1)
-                compare_df['Hour'] = compare_df['Hour'].str.extract(r'Hour_(\d+)').astype(int)
+                #compare_df['Hour'] = compare_df['Hour'].str.extract(r'Hour_(\d+)').astype(int)
+
+                print(compare_df)
+
                 fig = go.Figure()
 
-                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['Before Optimization'],
+                fig.add_trace(go.Scatter(x= tcol, y=compare_df['Before Optimization'],
                                      name='Before Optimization',line=dict(color='blue'), mode = 'lines'))
 
-                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['After Optimization'],
+                fig.add_trace(go.Scatter(x= tcol, y=compare_df['After Optimization'],
                                      name='After Optimization', line=dict(color='green'), mode = 'lines'))
 
                 fig.update_layout(
                     title= {'text': f"Load and Tariff Profiles for ALL consumers ", #  | Total Savings %: {total_savings_pct} %",
                     'font': dict(size=8)},
-                    xaxis_title='Hour of Day',
+                    xaxis_title='TimeBlock of Day',
                     yaxis_title='Total Load (kW)',
                     barmode='group',
                     autosize=True,
@@ -788,9 +837,21 @@ def register_callbacks(app):
 
 
 
-            tcols = [f"Hour_{i}" for i in range(1, 25)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
-            x_vals = list(range(1, 25))
+            tb_range = TimeBlockRangeCache.get()
+            if tb_range["first"] is None or tb_range["last"] is None:
+                # detect existing TB columns from dataset
+                tcols = sorted([col for col in sub_original.columns if col.startswith("TB_")],
+                               key=lambda c: int(c.split("_")[1]))
+                x_vals = list(range(1, len(tcols) + 1))
+                tariff_cols = [f"Tariff_{i}" for i in range(1, len(tcols) + 1)]
+
+            else:
+                first_tb = tb_range["first"] or 1
+                last_tb = tb_range["last"]
+
+                tcols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                tariff_cols = [f"Tariff_{i}" for i in range(first_tb, last_tb + 1)]
+                x_vals = list(range(first_tb, last_tb + 1))
 
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -931,9 +992,22 @@ def register_callbacks(app):
                 net_change_profit = ""
 
 
-            tcols = [f"Hour_{i}" for i in range(1, 25)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, 25)]
-            x_vals = list(range(1, 25))
+            tb_range = TimeBlockRangeCache.get()
+            if tb_range["first"] is None or tb_range["last"] is None:
+                # detect existing TB columns from dataset
+                tcols = sorted([col for col in sub_original.columns if col.startswith("TB_")],
+                               key=lambda c: int(c.split("_")[1]))
+                x_vals = list(range(1, len(tcols) + 1))
+                tariff_cols = [f"Tariff_{i}" for i in range(1, len(tcols) + 1)]
+
+            else:
+                first_tb = tb_range["first"] or 1
+                last_tb = tb_range["last"]
+
+                tcols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                tariff_cols = [f"Tariff_{i}" for i in range(first_tb, last_tb + 1)]
+                x_vals = list(range(first_tb, last_tb + 1))
+
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -1005,7 +1079,22 @@ def register_callbacks(app):
                 processing_df = pd.read_json(store_data["all_processing_df"], orient='split')
                 sheet_df = output
 
-                cols = [f'Hour_{i}' for i in range(1, 25)]
+                tb_range = TimeBlockRangeCache.get()
+
+                if tb_range["first"] is None or tb_range["last"] is None:
+                    # detect existing TB columns from dataset
+                    cols = sorted([col for col in sheet_df.columns if col.startswith("TB_")],
+                                   key=lambda c: int(c.split("_")[1]))
+                    tcol = [(i + 1) for i in range(len(cols)) ]
+
+                else:
+                    first_tb = tb_range["first"] or 1
+                    last_tb = tb_range["last"]
+
+                    cols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                    tcol = [(i + 1) for i in range(len(cols))]
+
+
                 before_opt = sheet_df[sheet_df['Type'] == 'Before Optimization'].copy()
                 after_opt = sheet_df[sheet_df['Type'] == 'After Optimization'].copy()
 
@@ -1025,19 +1114,19 @@ def register_callbacks(app):
                 total_savings_pct = (total_savings / total_bill * 100).round(1)
 
                 # Optional: Format Hour column to be numeric (Hour_1 → 1)
-                compare_df['Hour'] = compare_df['Hour'].str.extract(r'Hour_(\d+)').astype(int)
+                #compare_df['Hour'] = compare_df['Hour'].str.extract(r'Hour_(\d+)').astype(int)
                 fig = go.Figure()
 
-                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['Before Optimization'],
+                fig.add_trace(go.Scatter(x= tcol, y=compare_df['Before Optimization'],
                                      name='Before Optimization',line=dict(color='blue'), mode = 'lines'))
 
-                fig.add_trace(go.Scatter(x=compare_df['Hour'], y=compare_df['After Optimization'],
+                fig.add_trace(go.Scatter(x= tcol, y=compare_df['After Optimization'],
                                      name='After Optimization', line=dict(color='green'), mode = 'lines'))
 
                 fig.update_layout(
                     title= {'text': f"Load and Tariff Profiles for ALL consumers" , # | Total Savings %: {total_savings_pct} %",
                     'font': dict(size=8)},
-                    xaxis_title='Hour of Day',
+                    xaxis_title='TimeBlock of Day',
                     yaxis_title='Total Load (kW)',
                     barmode='group',
                     autosize=True,

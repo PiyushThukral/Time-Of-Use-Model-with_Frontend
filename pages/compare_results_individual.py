@@ -384,12 +384,30 @@ def register_callbacks(app):
             # hr_cols = _timeblock_columns(df.columns)
             # cache_timeblock_range_left(df.columns)
             # tb_range = TimeBlockRangeCacheCompareLeft.get()
-            
+
+
             tb_range = TimeBlockRangeCache.get()
+
+            if tb_range["first"] is None or tb_range["last"] is None:
+                # detect existing TB columns from dataset
+                tcols = sorted([col for col in sub_original.columns if col.startswith("TB_")],
+                               key=lambda c: int(c.split("_")[1]))
+                x_vals = list(range(1, len(tcols) + 1))
+                tariff_cols = [f"Tariff_{i}" for i in range(1, len(tcols) + 1)]
+
+            else:
+                first_tb = tb_range["first"] or 1
+                last_tb = tb_range["last"]
+
+                tcols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                tariff_cols = [f"Tariff_{i}" for i in range(first_tb, last_tb + 1)]
+                x_vals = list(range(first_tb, last_tb + 1))
             
-            tcols = [f"TB_{i}" for i in range(1, tb_range['last'] + 1)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last'] + 1)]
-            x_vals = list(range(1, tb_range['last'] + 1))
+            # tb_range = TimeBlockRangeCache.get()
+            #
+            # tcols = [f"TB_{i}" for i in range(1, tb_range['last'] + 1)]
+            # tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last'] + 1)]
+            # x_vals = list(range(1, tb_range['last'] + 1))
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -464,7 +482,21 @@ def register_callbacks(app):
                 sheet_df = output
 
                 tb_range = TimeBlockRangeCache.get()
-                cols = [f'TB_{i}' for i in range(1, tb_range['last']+1)]
+
+                if tb_range["first"] is None or tb_range["last"] is None:
+                    # detect existing TB columns from dataset
+                    cols = sorted([col for col in bills_df.columns if col.startswith("TB_")],
+                                   key=lambda c: int(c.split("_")[1]))
+
+                else:
+                    first_tb = tb_range["first"] or 1
+                    last_tb = tb_range["last"]
+
+                    cols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+
+
+
+                #cols = [f'TB_{i}' for i in range(1, tb_range['last']+1)]
                 before_opt = sheet_df[sheet_df['Type'] == 'Before Optimization'].copy()
                 after_opt = sheet_df[sheet_df['Type'] == 'After Optimization'].copy()
 
@@ -582,10 +614,28 @@ def register_callbacks(app):
 
             net_change_profit = output[output['Consumer No'] == consumer]['Change_in_Retailer_Profit'].unique().round(2)
 
+
             tb_range = TimeBlockRangeCache.get()
-            tcols = [f"TB_{i}" for i in range(1, tb_range['last']+1)]
-            tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last']+1)]
-            x_vals = list(range(1, tb_range['last']+1))
+
+            if tb_range["first"] is None or tb_range["last"] is None:
+                # detect existing TB columns from dataset
+                tcols = sorted([col for col in sub_original.columns if col.startswith("TB_")],
+                               key=lambda c: int(c.split("_")[1]))
+                x_vals = list(range(1, len(tcols) + 1))
+                tariff_cols = [f"Tariff_{i}" for i in range(1, len(tcols) + 1)]
+
+            else:
+                first_tb = tb_range["first"] or 1
+                last_tb = tb_range["last"]
+
+                tcols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+                tariff_cols = [f"Tariff_{i}" for i in range(first_tb, last_tb + 1)]
+                x_vals = list(range(first_tb, last_tb + 1))
+
+            # tb_range = TimeBlockRangeCache.get()
+            # tcols = [f"TB_{i}" for i in range(1, tb_range['last']+1)]
+            # tariff_cols = [f"Tariff_{i}" for i in range(1, tb_range['last']+1)]
+            # x_vals = list(range(1, tb_range['last']+1))
 
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -659,8 +709,22 @@ def register_callbacks(app):
                 sheet_df = output
                 bills_df = pd.read_json(store_data["bills_df"], orient='split')
                 bills_before_opt = bills_df[bills_df['Type'] == "Before Optimization"]
+
                 tb_range = TimeBlockRangeCache.get()
-                cols = [f'TB_{i}' for i in range(1, tb_range['last']+1)]
+
+                if tb_range["first"] is None or tb_range["last"] is None:
+                    # detect existing TB columns from dataset
+                    cols = sorted([col for col in bills_df.columns if col.startswith("TB_")],
+                                   key=lambda c: int(c.split("_")[1]))
+
+
+                else:
+                    first_tb = tb_range["first"] or 1
+                    last_tb = tb_range["last"]
+
+                    cols = [f"TB_{i}" for i in range(first_tb, last_tb + 1)]
+
+
                 before_opt = sheet_df[sheet_df['Type'] == 'Before Optimization'].copy()
                 after_opt = sheet_df[sheet_df['Type'] == 'After Optimization'].copy()
 
